@@ -1,0 +1,75 @@
+---
+title: Introduction
+description: Local-first memory for coding agents. Your agent remembers decisions, bugs, and context across sessions — no cloud, no API keys, no cost.
+---
+
+# EchoVault
+
+Local memory for coding agents. Your agent remembers decisions, bugs, and context across sessions — no cloud, no API keys, no cost.
+
+Coding agents forget everything between sessions. They re-discover the same patterns, repeat the same mistakes, and forget the decisions you made yesterday. EchoVault gives your agent persistent memory that makes it better with every session.
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Install EchoVault and configure it for your agent in under 2 minutes
+  </Card>
+  <Card title="Quick start" icon="rocket" href="/quickstart">
+    Save your first memory and see how agents use it automatically
+  </Card>
+  <Card title="CLI reference" icon="terminal" href="/cli/save">
+    Complete command reference for the memory CLI
+  </Card>
+  <Card title="Configuration" icon="gear" href="/config/overview">
+    Configure embeddings, storage location, and search behavior
+  </Card>
+</CardGroup>
+
+## Why EchoVault?
+
+**Local-first** — Everything stays on your machine. Memories are stored as Markdown in `~/.memory/vault/`, readable in Obsidian or any editor. No data leaves your machine unless you opt into cloud embeddings.
+
+**MCP native** — Runs as an MCP server exposing `memory_save`, `memory_search`, and `memory_context` as tools. Agents call them directly — no shell hooks needed.
+
+**Zero idle cost** — No background processes, no daemon, no RAM overhead. The MCP server only runs when the agent starts it.
+
+**Hybrid search** — FTS5 keyword search works out of the box. Add Ollama or OpenAI for semantic vector search.
+
+**Cross-agent** — Memories saved by Claude Code are searchable in Cursor, Codex, and OpenCode. One vault, many agents.
+
+**Secret redaction** — 3-layer redaction strips API keys, passwords, and credentials before anything hits disk. Supports explicit `<redacted>` tags, pattern detection, and custom `.memoryignore` rules.
+
+**Obsidian-compatible** — Session files are valid Markdown with YAML frontmatter. Point Obsidian at `~/.memory/vault/` and browse your agent's memory visually.
+
+## How it works
+
+```
+~/.memory/
+├── vault/                    # Obsidian-compatible Markdown
+│   └── my-project/
+│       └── 2026-02-01-session.md
+├── index.db                  # SQLite: FTS5 + sqlite-vec
+└── config.yaml               # Embedding provider config
+```
+
+- **Markdown vault** — one file per session per project, with YAML frontmatter
+- **SQLite index** — FTS5 for keywords, sqlite-vec for semantic vectors
+- **Compact pointers** — search returns ~50-token summaries; full details fetched on demand
+- **3-layer redaction** — explicit tags, pattern matching, and `.memoryignore` rules
+
+## Supported agents
+
+EchoVault works with Claude Code, Cursor, Codex, and OpenCode. One command sets up the MCP config for your agent:
+
+```bash
+memory setup claude-code   # or: cursor, codex, opencode
+```
+
+All agents share the same memory vault, so memories saved by one agent are available to all others.
+
+## Get started
+
+<CardGroup cols={1}>
+  <Card title="Install EchoVault" icon="download" href="/installation">
+    Get up and running in 2 minutes
+  </Card>
+</CardGroup>

@@ -1,0 +1,390 @@
+---
+title: 'memory setup'
+description: 'Install EchoVault hooks for coding agents'
+---
+
+## Overview
+
+The `memory setup` command group installs EchoVault integration hooks into various coding agents. This enables automatic memory context injection at session start.
+
+## Syntax
+
+```bash
+memory setup <agent> [OPTIONS]
+```
+
+## Supported Agents
+
+- `claude-code` - Claude Code (Anthropic)
+- `cursor` - Cursor AI editor
+- `codex` - Codex AI
+- `opencode` - OpenCode (MCP server)
+
+## Subcommands
+
+### claude-code
+
+Install hooks into Claude Code settings.
+
+```bash
+memory setup claude-code [OPTIONS]
+```
+
+#### Options
+
+<ParamField path="--config-dir" type="string">
+  Path to `.claude` directory. Default: `~/.claude` (global) or `./.claude` (project).
+</ParamField>
+
+<ParamField path="--project" type="flag">
+  Install in current project instead of globally (uses `./.claude`).
+</ParamField>
+
+#### Examples
+
+**Global installation:**
+
+```bash
+memory setup claude-code
+```
+
+**Output:**
+```
+EchoVault hooks installed to /home/user/.claude
+```
+
+**Project-specific installation:**
+
+```bash
+memory setup claude-code --project
+```
+
+**Output:**
+```
+EchoVault hooks installed to /home/user/myproject/.claude
+```
+
+**Custom directory:**
+
+```bash
+memory setup claude-code --config-dir /path/to/.claude
+```
+
+### cursor
+
+Install hooks into Cursor `hooks.json`.
+
+```bash
+memory setup cursor [OPTIONS]
+```
+
+#### Options
+
+<ParamField path="--config-dir" type="string">
+  Path to `.cursor` directory. Default: `~/.cursor` (global) or `./.cursor` (project).
+</ParamField>
+
+<ParamField path="--project" type="flag">
+  Install in current project instead of globally (uses `./.cursor`).
+</ParamField>
+
+#### Examples
+
+**Global installation:**
+
+```bash
+memory setup cursor
+```
+
+**Output:**
+```
+EchoVault hooks installed to /home/user/.cursor/hooks.json
+```
+
+**Project-specific installation:**
+
+```bash
+memory setup cursor --project
+```
+
+**Custom directory:**
+
+```bash
+memory setup cursor --config-dir /path/to/.cursor
+```
+
+### codex
+
+Install EchoVault section into Codex `AGENTS.md` and `config.toml`.
+
+```bash
+memory setup codex [OPTIONS]
+```
+
+#### Options
+
+<ParamField path="--config-dir" type="string">
+  Path to `.codex` directory. Default: `~/.codex` (global) or `./.codex` (project).
+</ParamField>
+
+<ParamField path="--project" type="flag">
+  Install in current project instead of globally (uses `./.codex`).
+</ParamField>
+
+#### Examples
+
+**Global installation:**
+
+```bash
+memory setup codex
+```
+
+**Output:**
+```
+EchoVault integration added to /home/user/.codex/AGENTS.md and config.toml
+```
+
+**Project-specific installation:**
+
+```bash
+memory setup codex --project
+```
+
+**Custom directory:**
+
+```bash
+memory setup codex --config-dir /path/to/.codex
+```
+
+### opencode
+
+Install EchoVault MCP server into OpenCode.
+
+```bash
+memory setup opencode [OPTIONS]
+```
+
+#### Options
+
+<ParamField path="--project" type="flag">
+  Install in current project instead of globally.
+</ParamField>
+
+#### Examples
+
+**Global installation:**
+
+```bash
+memory setup opencode
+```
+
+**Output:**
+```
+EchoVault MCP server installed to OpenCode
+```
+
+**Project-specific installation:**
+
+```bash
+memory setup opencode --project
+```
+
+## Global vs Project Installation
+
+### Global installation (default)
+
+```bash
+memory setup cursor
+```
+
+- Installs to home directory: `~/.cursor`, `~/.claude`, etc.
+- Works across all projects
+- Agent sees all memories (use `--project` flag in hooks to filter)
+
+### Project-specific installation
+
+```bash
+memory setup cursor --project
+```
+
+- Installs to current directory: `./.cursor`, `./.claude`, etc.
+- Only active in this project
+- Useful for team-shared configurations
+
+## What Gets Installed
+
+### Claude Code
+
+Adds memory context hook to `.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "session_start": "memory context --project --limit 10"
+  }
+}
+```
+
+### Cursor
+
+Adds memory hook to `.cursor/hooks.json`:
+
+```json
+{
+  "hooks": [
+    {
+      "name": "echovault-context",
+      "command": "memory context --project --limit 10",
+      "when": "session_start"
+    }
+  ]
+}
+```
+
+### Codex
+
+Adds EchoVault section to `.codex/AGENTS.md` and registers the hook in `config.toml`.
+
+### OpenCode
+
+Registers the EchoVault MCP server in OpenCode's MCP configuration.
+
+## Verification
+
+### Check installation
+
+**Claude Code:**
+```bash
+cat ~/.claude/settings.json
+```
+
+**Cursor:**
+```bash
+cat ~/.cursor/hooks.json
+```
+
+**Codex:**
+```bash
+cat ~/.codex/AGENTS.md | grep -A 10 "EchoVault"
+```
+
+### Test the hook
+
+```bash
+# Simulate what the agent will run
+memory context --project --limit 10
+```
+
+## Troubleshooting
+
+### Hook not running
+
+1. **Check installation:**
+   ```bash
+   cat ~/.cursor/hooks.json
+   ```
+
+2. **Verify command works:**
+   ```bash
+   memory context --project
+   ```
+
+3. **Check agent logs:**
+   - Cursor: Check developer console
+   - Claude Code: Check extension logs
+
+### Permission errors
+
+```bash
+# Fix permissions
+chmod +x $(which memory)
+
+# Reinstall
+memory setup cursor
+```
+
+### Config directory not found
+
+```bash
+# Create it first
+mkdir -p ~/.cursor
+
+# Then install
+memory setup cursor
+```
+
+## Multiple Agents
+
+You can install EchoVault for multiple agents:
+
+```bash
+memory setup cursor
+memory setup claude-code
+memory setup codex
+memory setup opencode
+```
+
+Each agent will independently call `memory context` at session start.
+
+## Use Cases
+
+### Setup for new project
+
+```bash
+cd myproject
+
+# Initialize memory
+memory init
+memory config init
+
+# Install project-specific hooks
+memory setup cursor --project
+memory setup claude-code --project
+
+# Test
+memory context --project
+```
+
+### Setup for all projects (global)
+
+```bash
+# Install globally
+memory setup cursor
+memory setup claude-code
+memory setup codex
+memory setup opencode
+
+# Test
+cd ~/anyproject
+memory context --project
+```
+
+### Team setup
+
+```bash
+cd team-project
+
+# Project-specific installation
+memory setup cursor --project
+
+# Commit configuration
+git add .cursor/
+git commit -m "Add EchoVault integration"
+git push
+
+# Team members get hooks automatically
+```
+
+## Related Commands
+
+- [`memory uninstall`](/cli/uninstall) - Remove hooks
+- [`memory context`](/cli/context) - Preview what agents will see
+- [`memory mcp`](/cli/mcp) - Run MCP server for OpenCode
+
+<Tip>
+Use project-specific installation (`--project`) when working with a team to share the configuration via git.
+</Tip>
+
+<Note>
+After installation, restart your coding agent to activate the hooks. The hooks run automatically at session start.
+</Note>

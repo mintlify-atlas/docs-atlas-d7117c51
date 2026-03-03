@@ -1,0 +1,60 @@
+---
+title: 'memory init'
+description: 'Initialize the memory vault'
+---
+
+## Overview
+
+The `memory init` command initializes a new memory vault in your memory home directory. This creates the necessary directory structure for storing memories.
+
+## Syntax
+
+```bash
+memory init
+```
+
+## Description
+
+This command creates the vault directory at `$MEMORY_HOME/vault` (or `~/.memory/vault` if `MEMORY_HOME` is not set). The vault is where all your project memories are stored.
+
+If the directory already exists, the command will succeed silently.
+
+## Examples
+
+### Initialize a new vault
+
+```bash
+memory init
+```
+
+**Output:**
+```
+Memory vault initialized at /home/user/.memory
+```
+
+### Initialize with custom MEMORY_HOME
+
+```bash
+MEMORY_HOME=/path/to/custom/location memory init
+```
+
+**Output:**
+```
+Memory vault initialized at /path/to/custom/location
+```
+
+## What Gets Created
+
+The command creates:
+- The memory home directory (if it doesn't exist)
+- A `vault/` subdirectory where memories are stored
+
+## Related Commands
+
+- [`memory config`](/cli/config) - View memory home location and configuration
+- [`memory config set-home`](/cli/config#set-home) - Set a persistent memory home path
+- [`memory save`](/cli/save) - Save your first memory after initialization
+
+<Note>
+You only need to run `memory init` once. If you're using `memory config set-home` or the `MEMORY_HOME` environment variable, the directories will be created automatically.
+</Note>

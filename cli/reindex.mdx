@@ -1,0 +1,336 @@
+---
+title: 'memory reindex'
+description: 'Rebuild vector index with current embedding provider'
+---
+
+## Overview
+
+The `memory reindex` command regenerates embeddings for all memories using the current embedding provider configured in `config.yaml`. This is necessary after changing embedding settings or when adding embeddings to an existing vault.
+
+## Syntax
+
+```bash
+memory reindex
+```
+
+## When to Use
+
+### After changing embedding provider
+
+When you switch providers:
+
+```bash
+# Edit config.yaml to change provider from ollama to openai
+nano ~/.memory/config.yaml
+
+# Rebuild all embeddings
+memory reindex
+```
+
+### After changing embedding model
+
+When you switch models within the same provider:
+
+```bash
+# Edit config.yaml to change from nomic-embed-text to mxbai-embed-large
+nano ~/.memory/config.yaml
+
+# Reindex with new model
+memory reindex
+```
+
+### Adding embeddings to existing vault
+
+When you initially used keyword-only search and now want semantic search:
+
+```bash
+# Configure embeddings in config.yaml
+memory config init
+nano ~/.memory/config.yaml
+
+# Generate embeddings for all existing memories
+memory reindex
+```
+
+### After embedding provider upgrade
+
+When your provider releases a new model version:
+
+```bash
+# Update model in config.yaml
+memory reindex
+```
+
+## Examples
+
+### Basic reindex
+
+```bash
+memory reindex
+```
+
+**Output:**
+```
+Reindexing 47 memories with ollama/nomic-embed-text...
+  47/47
+Re-indexed 47 memories with nomic-embed-text (768 dims)
+```
+
+### When no memories exist
+
+```bash
+memory reindex
+```
+
+**Output:**
+```
+No memories to reindex.
+```
+
+### With progress updates
+
+For large vaults, you'll see progress:
+
+```bash
+memory reindex
+```
+
+**Output:**
+```
+Reindexing 523 memories with openai/text-embedding-3-small...
+  100/523
+  200/523
+  300/523
+  400/523
+  500/523
+  523/523
+Re-indexed 523 memories with text-embedding-3-small (1536 dims)
+```
+
+## How It Works
+
+1. **Count memories**: Queries the database for total memory count
+2. **Load config**: Reads current embedding provider and model from `config.yaml`
+3. **Generate embeddings**: For each memory:
+   - Extracts text (title + what + why + impact + details)
+   - Sends to embedding provider API
+   - Stores the vector in the database
+4. **Show progress**: Updates the counter for each memory processed
+5. **Report results**: Shows total count, model name, and vector dimensions
+
+## Performance
+
+### Speed
+
+- **Ollama (local)**: 10-50 memories/second (depends on hardware)
+- **OpenAI**: 5-20 memories/second (depends on rate limits)
+
+### Time estimates
+
+- 50 memories: ~5-15 seconds
+- 200 memories: ~20-60 seconds
+- 1000 memories: ~2-5 minutes
+
+### Rate limiting
+
+If you hit rate limits:
+
+```bash
+memory reindex
+# Wait for error, then retry:
+memory reindex  # It will continue from where it left off
+```
+
+## Supported Providers
+
+### Ollama (local)
+
+```yaml
+embedding:
+  provider: ollama
+  model: nomic-embed-text  # or mxbai-embed-large
+  base_url: http://localhost:11434
+```
+
+**Models:**
+- `nomic-embed-text`: 768 dimensions, fast, good quality
+- `mxbai-embed-large`: 1024 dimensions, slower, better quality
+
+### OpenAI
+
+```yaml
+embedding:
+  provider: openai
+  model: text-embedding-3-small
+  base_url: https://api.openai.com/v1
+  api_key: sk-...
+```
+
+**Models:**
+- `text-embedding-3-small`: 1536 dimensions, fast, cheaper
+- `text-embedding-3-large`: 3072 dimensions, slower, more expensive
+- `text-embedding-ada-002`: 1536 dimensions (legacy)
+
+## Error Handling
+
+### Provider not configured
+
+```bash
+memory reindex
+```
+
+**Output:**
+```
+Error: No embedding provider configured in config.yaml
+```
+
+**Fix:**
+```bash
+memory config init
+nano ~/.memory/config.yaml
+# Configure embedding section
+memory reindex
+```
+
+### Provider unavailable
+
+```bash
+memory reindex
+```
+
+**Output:**
+```
+Error: Failed to connect to ollama at http://localhost:11434
+```
+
+**Fix:**
+```bash
+# Start Ollama
+ollama serve
+
+# In another terminal:
+memory reindex
+```
+
+### Invalid API key
+
+```bash
+memory reindex
+```
+
+**Output:**
+```
+Error: Authentication failed with OpenAI API
+```
+
+**Fix:**
+```bash
+nano ~/.memory/config.yaml
+# Update api_key
+memory reindex
+```
+
+## What Gets Updated
+
+### Database changes
+
+- **embeddings table**: All vectors are replaced
+- **model metadata**: Updated with new model name and dimensions
+- **memories table**: Unchanged (content is preserved)
+
+### Files unchanged
+
+- Memory markdown files in `vault/` are NOT modified
+- Only the database vectors are regenerated
+
+## Use Cases
+
+### Migrate from keyword-only to semantic search
+
+```bash
+# You've been using EchoVault with FTS-only
+# Now you want semantic search
+
+# 1. Configure embeddings
+memory config init
+nano ~/.memory/config.yaml
+
+# 2. Generate vectors for existing memories
+memory reindex
+
+# 3. Test semantic search
+memory search "why did we choose postgres"
+memory context --semantic --project
+```
+
+### Switch from Ollama to OpenAI
+
+```bash
+# Edit config
+nano ~/.memory/config.yaml
+# Change provider: ollama → openai
+# Add api_key
+
+# Rebuild with OpenAI
+memory reindex
+
+# Verify
+memory config | grep embedding
+```
+
+### Upgrade to better model
+
+```bash
+# Edit config
+nano ~/.memory/config.yaml
+# Change model: nomic-embed-text → mxbai-embed-large
+
+# Rebuild
+memory reindex
+```
+
+### Fix corrupted embeddings
+
+If embeddings are corrupted or inconsistent:
+
+```bash
+memory reindex
+```
+
+This regenerates all vectors from scratch.
+
+## Verification
+
+### Check embedding count
+
+```bash
+sqlite3 ~/.memory/memory.db "SELECT COUNT(*) FROM embeddings;"
+```
+
+### Check model metadata
+
+```bash
+memory config
+```
+
+### Test semantic search
+
+```bash
+memory search "natural language query about your project"
+memory context --semantic --project
+```
+
+## Related Commands
+
+- [`memory config`](/cli/config) - Configure embedding provider
+- [`memory config init`](/cli/config#init) - Generate config template
+- [`memory search`](/cli/search) - Test semantic search after reindexing
+- [`memory context --semantic`](/cli/context) - Force semantic context retrieval
+
+<Tip>
+After reindexing, use `memory search` with natural language queries to verify semantic search is working. Try queries like "why did we..." or "how do we handle..."
+</Tip>
+
+<Note>
+Reindexing is safe and idempotent. You can run it multiple times without risk. It only updates the vector database, never modifies your memory files.
+</Note>

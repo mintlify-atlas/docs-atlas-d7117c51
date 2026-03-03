@@ -1,0 +1,459 @@
+---
+title: Troubleshooting
+description: Common issues and solutions for EchoVault
+---
+
+This guide covers common issues you may encounter while using EchoVault and how to resolve them.
+
+## Installation Issues
+
+<AccordionGroup>
+  <Accordion title="sqlite-vec extension fails to load">
+    EchoVault requires the sqlite-vec extension for vector operations. If you see errors about loading extensions:
+
+    **Solution:** Install `pysqlite3-binary` which includes extension support:
+
+    ```bash
+    pip install pysqlite3-binary
+    ```
+
+    The system will automatically fall back to the standard `sqlite3` module if `pysqlite3` is unavailable, but extension loading may fail depending on your Python installation.
+  </Accordion>
+
+  <Accordion title="Command 'memory' not found after installation">
+    After installing with pip, the `memory` command may not be in your PATH.
+
+    **Solution:** Try one of these approaches:
+
+    ```bash
+    # Option 1: Use python -m
+    python -m memory init
+
+    # Option 2: Add pip's bin directory to PATH
+    export PATH="$HOME/.local/bin:$PATH"
+
+    # Option 3: Reinstall with --user flag
+    pip install --user git+https://github.com/mraza007/echovault.git
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Embedding Issues
+
+<AccordionGroup>
+  <Accordion title="DimensionMismatchError when saving memories">
+    This error occurs when your embedding provider's dimension doesn't match the dimension stored in the database.
+
+    ```
+    DimensionMismatchError: Embedding dimension mismatch: database has 768, provider returned 384
+    ```
+
+    **Cause:** You changed embedding models or providers after memories were already saved.
+
+    **Solution:** Rebuild the vector index with the new model:
+
+    ```bash
+    memory reindex
+    ```
+
+    <Warning>
+      Reindexing will re-embed all existing memories with your current provider. This may take several minutes if you have many memories stored.
+    </Warning>
+
+    The reindex command:
+    - Detects the new embedding dimension
+    - Drops and recreates the vector table
+    - Re-embeds all memories with the current provider
+  </Accordion>
+
+  <Accordion title="Embedding failed - memory saved without vector">
+    You may see warnings like:
+
+    ```
+    Warning: embedding failed (HTTPError). Memory saved without vector.
+    ```
+
+    **Cause:** The embedding provider is unreachable or returned an error.
+
+    **What happens:** Your memory is still saved to the database and markdown file, but without a vector embedding. You can still search it using keyword search (FTS5).
+
+    **Solutions:**
+
+    **For Ollama:**
+    ```bash
+    # Check if Ollama is running
+    ollama list
+
+    # Start Ollama if needed
+    ollama serve
+
+    # Pull the model if not installed
+    ollama pull nomic-embed-text
+    ```
+
+    **For OpenAI:**
+    - Verify your API key is correct in `~/.memory/config.yaml`
+    - Check your network connection
+    - Ensure you have API credits remaining
+
+    **After fixing the provider:**
+    ```bash
+    memory reindex
+    ```
+  </Accordion>
+
+  <Accordion title="Ollama timeout or slow embedding">
+    If embeddings are slow or timing out, Ollama may need to load the model into memory first.
+
+    **Solution:** Pre-warm the model:
+
+    ```bash
+    ollama run nomic-embed-text "test"
+    ```
+
+    This loads the model into memory. Subsequent embeddings will be much faster.
+
+    <Info>
+      EchoVault's `auto` semantic mode (default) checks if the Ollama model is already loaded before using vector search. If the model isn't warm, it falls back to keyword search to avoid delays.
+    </Info>
+  </Accordion>
+</AccordionGroup>
+
+## Search Issues
+
+<AccordionGroup>
+  <Accordion title="Search returns no results">
+    If `memory search` returns no results:
+
+    **Check 1: Verify memories exist**
+    ```bash
+    memory context --project
+    ```
+
+    **Check 2: Try keyword search**
+    ```bash
+    memory search "exact word from your memory"
+    ```
+
+    **Check 3: Check project filter**
+    Memories are project-scoped. If you saved a memory in one project and search from another, you won't find it unless you omit `--project`:
+
+    ```bash
+    # Search current project only
+    memory search "auth"
+
+    # Search all projects
+    memory search "auth" --all
+    ```
+
+    **Check 4: FTS5 tokenization**
+    FTS5 uses the Porter stemmer and may not match exact technical terms. Try searching for the root word or partial matches.
+  </Accordion>
+
+  <Accordion title="Vector search not working">
+    If semantic search isn't finding relevant results:
+
+    **Check if vectors are enabled:**
+    ```bash
+    memory config
+    ```
+
+    Look for the `embedding` section. If `provider` is not configured, you're only using keyword search.
+
+    **Enable vector search:**
+    ```bash
+    memory config init
+    ```
+
+    Then edit `~/.memory/config.yaml` to configure Ollama or OpenAI.
+
+    **Rebuild vectors for existing memories:**
+    ```bash
+    memory reindex
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## MCP Integration Issues
+
+<AccordionGroup>
+  <Accordion title="Agent doesn't see memory tools">
+    After running `memory setup <agent>`, the agent should have access to `memory_save`, `memory_search`, and `memory_context` tools.
+
+    **Troubleshooting:**
+
+    **For Claude Code:**
+    ```bash
+    # Check global config
+    cat ~/.claude.json
+
+    # Or check project config
+    cat .mcp.json
+    ```
+
+    Verify the `echovault` server entry exists.
+
+    **For Cursor:**
+    ```bash
+    cat .cursor/mcp.json
+    ```
+
+    **For OpenCode:**
+    ```bash
+    # Global
+    cat ~/.config/opencode/opencode.json
+
+    # Project
+    cat opencode.json
+    ```
+
+    **For Codex:**
+    ```bash
+    cat .codex/config.toml
+    ```
+
+    <Note>
+      After updating MCP config, restart your agent to load the new configuration.
+    </Note>
+  </Accordion>
+
+  <Accordion title="MCP server fails to start">
+    If the agent reports that the MCP server failed to start:
+
+    **Check 1: Test the server manually**
+    ```bash
+    memory mcp
+    ```
+
+    This starts the MCP server in stdio mode. If it fails, you'll see the error directly.
+
+    **Check 2: Verify Python environment**
+    The MCP config uses `uvx` or `npx` to run the server. Ensure your Python environment is accessible:
+
+    ```bash
+    which python
+    python -m memory mcp
+    ```
+
+    **Check 3: Review agent logs**
+    Each agent stores MCP logs in different locations:
+    - **Claude Code:** Check the developer console
+    - **Cursor:** `~/Library/Application Support/Cursor/logs/`
+    - **OpenCode:** Terminal output where you launched it
+  </Accordion>
+</AccordionGroup>
+
+## Configuration Issues
+
+<AccordionGroup>
+  <Accordion title="Config changes not taking effect">
+    After editing `~/.memory/config.yaml`, changes should take effect immediately.
+
+    **Verify your config:**
+    ```bash
+    memory config
+    ```
+
+    This displays the effective configuration, including redacted API keys.
+
+    **Common mistakes:**
+    - YAML indentation errors
+    - Wrong key names (e.g., `api-key` instead of `api_key`)
+    - Missing quotes around special characters
+
+    **Validate YAML syntax:**
+    ```bash
+    python -c "import yaml; yaml.safe_load(open('$HOME/.memory/config.yaml'))"
+    ```
+  </Accordion>
+
+  <Accordion title="MEMORY_HOME environment variable not working">
+    The `MEMORY_HOME` environment variable sets the memory storage location.
+
+    **Check current value:**
+    ```bash
+    memory config
+    ```
+
+    Look for `memory_home` and `memory_home_source`.
+
+    **Priority order:**
+    1. `MEMORY_HOME` env var (highest)
+    2. Persisted home via `memory config set-home`
+    3. Default `~/.memory` (lowest)
+
+    **Set persistently:**
+    ```bash
+    memory config set-home /path/to/memory
+    ```
+
+    **Set per-session:**
+    ```bash
+    export MEMORY_HOME=/path/to/memory
+    memory context --project
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## File System Issues
+
+<AccordionGroup>
+  <Accordion title="Markdown files missing or corrupted">
+    EchoVault stores memories as Markdown files in `~/.memory/vault/`.
+
+    **List session files:**
+    ```bash
+    memory sessions
+    ```
+
+    **Check vault directory:**
+    ```bash
+    ls -la ~/.memory/vault/
+    ```
+
+    Each project has its own subdirectory with session files named `YYYY-MM-DD-session.md`.
+
+    **If files are missing:**
+    - Check if `MEMORY_HOME` is set to a different location
+    - Verify file permissions on the vault directory
+    - Memories are still in the SQLite database (`~/.memory/index.db`) even if markdown files are deleted
+  </Accordion>
+
+  <Accordion title="Can't edit memories in Obsidian">
+    EchoVault markdown files are designed to be Obsidian-compatible, but editing them directly can cause sync issues.
+
+    **Best practice:**
+    - Use Obsidian for **reading** memories
+    - Use `memory save` for creating new entries
+    - The database is the source of truth for search
+
+    <Warning>
+      Editing markdown files directly won't update the SQLite index or embeddings. Changes won't appear in search results.
+    </Warning>
+
+    **If you edit in Obsidian:**
+    You'll need to manually update the database or re-save the memory via CLI.
+  </Accordion>
+</AccordionGroup>
+
+## Database Issues
+
+<AccordionGroup>
+  <Accordion title="Database locked or corrupted">
+    SQLite database issues are rare but can occur.
+
+    **Symptoms:**
+    - "Database is locked" errors
+    - "Malformed database" errors
+    - Search returns unexpected results
+
+    **Solutions:**
+
+    **Check for active connections:**
+    ```bash
+    lsof ~/.memory/index.db
+    ```
+
+    **Backup and rebuild:**
+    ```bash
+    # Backup the database
+    cp ~/.memory/index.db ~/.memory/index.db.backup
+
+    # Export all memories (if possible)
+    memory context --all > memories-backup.txt
+
+    # Delete the database
+    rm ~/.memory/index.db
+
+    # Reinitialize
+    memory init
+
+    # Reindex will rebuild from markdown files
+    memory reindex
+    ```
+
+    <Note>
+      The markdown files in `~/.memory/vault/` are the authoritative source. If the database is lost, you can rebuild it by reindexing.
+    </Note>
+  </Accordion>
+
+  <Accordion title="FTS5 search not working">
+    If keyword search is failing but vector search works:
+
+    **Rebuild FTS index:**
+    ```bash
+    sqlite3 ~/.memory/index.db "INSERT INTO memories_fts(memories_fts) VALUES('rebuild');"
+    ```
+
+    This rebuilds the FTS5 index from the memories table.
+  </Accordion>
+</AccordionGroup>
+
+## Performance Issues
+
+<AccordionGroup>
+  <Accordion title="Slow search with large memory vault">
+    If you have thousands of memories, search may become slower.
+
+    **Optimizations:**
+
+    **Use project filters:**
+    ```bash
+    memory search "query" --project
+    ```
+
+    **Use source filters:**
+    ```bash
+    memory search "query" --source opencode
+    ```
+
+    **Adjust context limit:**
+    ```bash
+    memory context --project --limit 5
+    ```
+
+    **Disable semantic search temporarily:**
+    Edit `~/.memory/config.yaml`:
+    ```yaml
+    context:
+      semantic: never  # Forces keyword search only
+      topup_recent: true
+    ```
+  </Accordion>
+
+  <Accordion title="Reindex taking too long">
+    Reindexing re-embeds all memories. For large vaults, this can take time.
+
+    **Progress tracking:**
+    ```bash
+    memory reindex
+    ```
+
+    The command shows progress: `Reindexing memories: 245/1000`
+
+    **Speed up embedding:**
+    - Use Ollama locally instead of OpenAI (no network latency)
+    - Use a smaller embedding model (faster but less accurate)
+    - Run reindex during off-hours
+
+    <Info>
+      Reindexing is only needed when you change embedding providers or models. Normal operations don't require it.
+    </Info>
+  </Accordion>
+</AccordionGroup>
+
+## Getting Help
+
+If you encounter issues not covered here:
+
+1. Check the [GitHub Issues](https://github.com/mraza007/echovault/issues) for known problems
+2. Run `memory config` to verify your setup
+3. Check agent logs for MCP-related errors
+4. Open a new issue with:
+   - Your OS and Python version
+   - Output of `memory config`
+   - Full error message and stack trace
+
+<Note>
+  When reporting issues, use `memory config` to share your configuration. API keys are automatically redacted.
+</Note>

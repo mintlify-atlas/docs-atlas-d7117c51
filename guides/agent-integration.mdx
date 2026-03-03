@@ -1,0 +1,472 @@
+---
+title: Agent Integration
+description: MCP tools for memory_save, memory_search, and memory_context
+---
+
+EchoVault runs as an **MCP server** exposing three tools that agents call directly: `memory_save`, `memory_search`, and `memory_context`. No shell hooks needed.
+
+## Setup
+
+Run one command to install MCP configuration for your agent:
+
+<CodeGroup>
+```bash Claude Code
+memory setup claude-code
+```
+
+```bash Cursor
+memory setup cursor
+```
+
+```bash Codex
+memory setup codex
+```
+
+```bash OpenCode
+memory setup opencode
+```
+</CodeGroup>
+
+**Global vs. Project:**
+
+- By default, setup installs globally (e.g., `~/.claude.json`, `~/.config/opencode/opencode.json`)
+- Use `--project` to install in the current project (e.g., `.mcp.json`, `opencode.json`)
+
+```bash
+# Global install
+memory setup claude-code
+
+# Project-specific install
+cd ~/my-project
+memory setup claude-code --project
+```
+
+<Tip>
+Use `--project` when working in a monorepo or when you want different memory configurations per project.
+</Tip>
+
+## MCP Tools
+
+### `memory_save`
+
+**Description:**
+
+Save a memory for future sessions. Agents MUST call this before ending any session where they made changes, fixed bugs, made decisions, or learned something.
+
+**When to use:**
+
+- Made an architectural or design decision (chose X over Y)
+- Fixed a bug (include root cause and solution)
+- Discovered a non-obvious pattern or gotcha
+- Learned something about the codebase not obvious from code
+- Set up infrastructure, tooling, or configuration
+- The user corrected you or clarified a requirement
+
+**Do NOT save:** trivial changes (typos, formatting), info obvious from reading the code, or duplicates of existing memories.
+
+**Schema:**
+
+<ParamField path="title" type="string" required>
+  Short title, max 60 chars
+</ParamField>
+
+<ParamField path="what" type="string" required>
+  1-2 sentences. The essence a future agent needs.
+</ParamField>
+
+<ParamField path="why" type="string">
+  Reasoning behind the decision or fix
+</ParamField>
+
+<ParamField path="impact" type="string">
+  What changed as a result
+</ParamField>
+
+<ParamField path="tags" type="array">
+  Array of relevant tags (e.g., `["auth", "jwt", "api"]`)
+</ParamField>
+
+<ParamField path="category" type="string">
+  One of:
+  - `decision`: chose X over Y
+  - `bug`: fixed a problem
+  - `pattern`: reusable gotcha
+  - `learning`: non-obvious discovery
+  - `context`: project setup/architecture
+</ParamField>
+
+<ParamField path="related_files" type="array">
+  Array of file paths involved (e.g., `["src/auth.ts", "src/middleware.ts"]`)
+</ParamField>
+
+<ParamField path="details" type="string">
+  Full context for a future agent with zero context. Prefer:
+  - Context
+  - Options considered
+  - Decision
+  - Tradeoffs
+  - Follow-up
+</ParamField>
+
+<ParamField path="project" type="string">
+  Project name. Auto-detected from cwd if omitted.
+</ParamField>
+
+**Example:**
+
+```json
+{
+  "title": "Replaced REST with GraphQL for mobile API",
+  "what": "Migrated mobile endpoints from REST to GraphQL",
+  "why": "Mobile clients needed flexible queries to reduce overfetching",
+  "impact": "Mobile API requests reduced by 60%, bundle size decreased",
+  "tags": ["graphql", "mobile", "api", "performance"],
+  "category": "decision",
+  "related_files": ["src/graphql/schema.ts", "src/mobile/api.ts"],
+  "details": "Context:\nMobile app was downloading entire user objects when only displaying name + avatar.\n\nOptions considered:\n- Option A: Add field filtering to REST endpoints\n- Option B: Migrate to GraphQL\n\nDecision:\nGraphQL lets mobile clients request exactly what they need.\n\nTradeoffs:\n- Pro: Reduced network overhead\n- Con: Backend complexity increased\n\nFollow-up:\n- Monitor query performance\n- Add DataLoader to prevent N+1 queries"
+}
+```
+
+**Response:**
+
+```json
+{
+  "id": "d4e9a1b7-c3f2-4a1b-9e8c-7d6f5a4b3c2d",
+  "file_path": "/home/user/.memory/vault/mobile-app/2026-03-03-session.md",
+  "warnings": []
+}
+```
+
+### `memory_search`
+
+**Description:**
+
+Search memories using keyword and semantic search. Returns matching memories ranked by relevance. Agents MUST call this at session start before doing any work, and whenever the user's request relates to a topic that may have prior context.
+
+**Schema:**
+
+<ParamField path="query" type="string" required>
+  Search terms or semantic query
+</ParamField>
+
+<ParamField path="limit" type="integer" default="5">
+  Maximum number of results
+</ParamField>
+
+<ParamField path="project" type="string">
+  Filter to a specific project
+</ParamField>
+
+**Example:**
+
+```json
+{
+  "query": "authentication decisions",
+  "limit": 5,
+  "project": "api-server"
+}
+```
+
+**Response:**
+
+```json
+[
+  {
+    "id": "a3f7b2c1-d4e9-4a1b-9e8c-7d6f5a4b3c2d",
+    "title": "Switched to JWT auth",
+    "what": "Replaced session cookies with JWT for stateless auth",
+    "why": "Needed stateless auth for API",
+    "impact": "All endpoints now require Bearer token",
+    "category": "decision",
+    "tags": ["auth", "jwt", "api"],
+    "project": "api-server",
+    "created_at": "2026-03-01",
+    "score": 8.42,
+    "has_details": true
+  },
+  {
+    "id": "b4c8e1a9-d3f2-4a1b-9e8c-7d6f5a4b3c2d",
+    "title": "OAuth2 integration for GitHub login",
+    "what": "Added GitHub OAuth2 for social login",
+    "why": null,
+    "impact": null,
+    "category": "context",
+    "tags": ["oauth", "github"],
+    "project": "web-app",
+    "created_at": "2026-02-28",
+    "score": 6.21,
+    "has_details": true
+  }
+]
+```
+
+### `memory_context`
+
+**Description:**
+
+Get memory context for the current project. Agents MUST call this at session start to load prior decisions, bugs, and context. Do not skip this step — prior sessions contain decisions and context that directly affect your current task.
+
+**Schema:**
+
+<ParamField path="project" type="string">
+  Project name. Auto-detected from cwd if omitted.
+</ParamField>
+
+<ParamField path="limit" type="integer" default="10">
+  Maximum number of memories
+</ParamField>
+
+**Example:**
+
+```json
+{
+  "project": "api-server",
+  "limit": 10
+}
+```
+
+**Response:**
+
+```json
+{
+  "total": 24,
+  "showing": 10,
+  "memories": [
+    {
+      "id": "a3f7b2c1",
+      "title": "Switched to JWT auth",
+      "category": "decision",
+      "tags": ["auth", "jwt"],
+      "date": "Mar 01"
+    },
+    {
+      "id": "b4c8e1a9",
+      "title": "Added Redis caching",
+      "category": "context",
+      "tags": ["cache", "redis"],
+      "date": "Feb 28"
+    }
+  ],
+  "message": "Use memory_search for specific topics. IMPORTANT: You MUST call memory_save before this session ends if you make any changes, decisions, or discoveries."
+}
+```
+
+## Agent Workflow
+
+Here's how agents should use memory tools:
+
+<Steps>
+  <Step title="Session start: Load context">
+    ```json
+    // Agent calls memory_context at the start of every session
+    {
+      "tool": "memory_context",
+      "arguments": {
+        "limit": 10
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="During work: Search for relevant memories">
+    ```json
+    // User asks: "How did we decide to handle authentication?"
+    // Agent calls memory_search before answering
+    {
+      "tool": "memory_search",
+      "arguments": {
+        "query": "authentication decision",
+        "limit": 5
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="Session end: Save learnings">
+    ```json
+    // Agent made a decision or fixed a bug
+    // Agent calls memory_save before ending the session
+    {
+      "tool": "memory_save",
+      "arguments": {
+        "title": "Fixed CORS error in production API",
+        "what": "Added Access-Control-Allow-Origin header to Nginx config",
+        "why": "Production API was rejecting browser requests from web app",
+        "impact": "Web app can now call API from different origin",
+        "category": "bug",
+        "tags": ["cors", "nginx", "production"],
+        "related_files": ["nginx/api.conf"],
+        "details": "Context:\nWeb app deployed to app.example.com\nAPI deployed to api.example.com\nBrowser was blocking cross-origin requests\n\nOptions considered:\n- Option A: Enable CORS in app code\n- Option B: Enable CORS in Nginx\n\nDecision:\nNginx-level CORS is more efficient and centralized\n\nTradeoffs:\nNginx config now critical for web app functionality\n\nFollow-up:\nDocument CORS setup in deployment guide"
+      }
+    }
+    ```
+  </Step>
+</Steps>
+
+## Testing MCP Integration
+
+After setup, restart your agent and verify the tools are loaded:
+
+### Claude Code
+
+1. Restart Claude Code
+2. Ask: "What memory tools do you have access to?"
+3. Claude should list `memory_save`, `memory_search`, and `memory_context`
+
+### Cursor
+
+1. Reload window (`Cmd+Shift+P` > "Developer: Reload Window")
+2. Open Composer
+3. Ask: "List all available MCP tools"
+4. Should include EchoVault memory tools
+
+### OpenCode
+
+1. Restart OpenCode
+2. Ask: "What tools can you use for memory?"
+3. Should list the three memory tools
+
+## Uninstalling
+
+Remove MCP configuration:
+
+<CodeGroup>
+```bash Claude Code
+memory uninstall claude-code
+```
+
+```bash Cursor
+memory uninstall cursor
+```
+
+```bash Codex
+memory uninstall codex
+```
+
+```bash OpenCode
+memory uninstall opencode
+```
+</CodeGroup>
+
+For project-specific installs, use `--project`:
+
+```bash
+cd ~/my-project
+memory uninstall claude-code --project
+```
+
+## Manual MCP Configuration
+
+If you need to configure MCP manually, here's what gets installed:
+
+### Claude Code
+
+**Global:** `~/.claude.json` or **Project:** `.mcp.json`
+
+```json
+{
+  "mcpServers": {
+    "echovault": {
+      "command": "memory",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+### Cursor
+
+**Location:** `.cursor/mcp.json`
+
+```json
+{
+  "mcpServers": {
+    "echovault": {
+      "command": "memory",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+### Codex
+
+**Location:** `.codex/config.toml`
+
+```toml
+[[mcp.servers]]
+name = "echovault"
+command = "memory"
+args = ["mcp"]
+```
+
+Codex also gets an `AGENTS.md` fallback if MCP isn't available (see [Codex Fallback](#codex-fallback)).
+
+### OpenCode
+
+**Global:** `~/.config/opencode/opencode.json` or **Project:** `opencode.json`
+
+```json
+{
+  "mcpServers": {
+    "echovault": {
+      "command": "memory",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+## Codex Fallback
+
+For Codex, if MCP isn't available, EchoVault installs a fallback `AGENTS.md` file that instructs Codex to use the CLI directly:
+
+```markdown
+# Local Memory
+
+You have access to a persistent memory system via the `memory` CLI.
+
+## At Session Start
+
+Check available memories for this project:
+
+```bash
+memory context --project
+```
+
+## Saving Memories
+
+```bash
+memory save \
+  --title "Short descriptive title" \
+  --what "What happened or was decided" \
+  --why "Reasoning behind it" \
+  --impact "What changed as a result" \
+  --tags "tag1,tag2,tag3" \
+  --category "decision" \
+  --related-files "src/auth.ts" \
+  --source "codex"
+```
+
+Categories: `decision`, `pattern`, `bug`, `context`, `learning`
+
+## Searching Memories
+
+```bash
+memory search "your query"                 # search all projects
+memory search "your query" --project       # current project only
+```
+```
+
+This allows Codex to use EchoVault even without MCP support.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Saving Memories" icon="floppy-disk" href="/guides/saving-memories">
+    Learn how to save decisions, bugs, and context
+  </Card>
+  <Card title="Searching Memories" icon="magnifying-glass" href="/guides/searching">
+    Search and retrieve memories effectively
+  </Card>
+</CardGroup>

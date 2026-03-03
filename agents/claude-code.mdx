@@ -1,0 +1,137 @@
+---
+title: Claude Code
+description: Set up EchoVault for Claude Code with global or project-scoped memory.
+---
+
+Claude Code integrates with EchoVault via MCP. One command installs the MCP server entry, and Claude automatically uses memory tools during sessions.
+
+## Installation
+
+<Steps>
+  <Step title="Install EchoVault">
+    ```bash
+    pip install git+https://github.com/mraza007/echovault.git
+    memory init
+    ```
+  </Step>
+
+  <Step title="Run setup">
+    ```bash
+    memory setup claude-code
+    ```
+
+    This writes the MCP server config to `~/.claude.json`.
+  </Step>
+
+  <Step title="Restart Claude Code">
+    Restart Claude Code to load the new MCP server.
+  </Step>
+</Steps>
+
+## What gets installed
+
+The setup command adds an `mcpServers` entry to `~/.claude.json`:
+
+```json
+{
+  "mcpServers": {
+    "echovault": {
+      "command": "memory",
+      "args": ["mcp"],
+      "type": "stdio"
+    }
+  }
+}
+```
+
+Claude spawns `memory mcp` at session start and gains access to three tools:
+- `memory_save`
+- `memory_search`
+- `memory_context`
+
+<Note>
+Legacy hook-based setups are migrated automatically. The setup command removes old hooks from `settings.json` and consolidates everything into the `.claude.json` or `.mcp.json` MCP config.
+</Note>
+
+## Project-scoped installation
+
+To install memory for a specific project instead of globally:
+
+```bash
+cd ~/my-project
+memory setup claude-code --project
+```
+
+This writes `.mcp.json` in the project root instead of `~/.claude.json`. Claude Code loads project-local config when available.
+
+<CodeGroup>
+```bash Global (default)
+memory setup claude-code
+# Writes to: ~/.claude.json
+```
+
+```bash Project-scoped
+cd ~/my-project
+memory setup claude-code --project
+# Writes to: .mcp.json
+```
+</CodeGroup>
+
+## Config file locations
+
+| Scope | Config file | Used when |
+|-------|-------------|----------|
+| Global | `~/.claude.json` | No project-local config exists |
+| Project | `.mcp.json` | Present in project root |
+
+<Warning>
+If both files exist, Claude Code prioritizes the project-local `.mcp.json`.
+</Warning>
+
+## Custom config directory
+
+If your `.claude` directory is in a non-standard location:
+
+```bash
+memory setup claude-code --config-dir /path/to/.claude
+```
+
+The setup command writes to `/path/to/.claude.json` (global) or derives the project root if `--project` is also specified.
+
+## Uninstalling
+
+To remove EchoVault from Claude Code:
+
+```bash
+memory uninstall claude-code
+```
+
+This removes the `echovault` entry from `~/.claude.json`. For project-scoped installs:
+
+```bash
+memory uninstall claude-code --project
+```
+
+This removes the entry from `.mcp.json`.
+
+## Usage
+
+Once installed, Claude automatically:
+- Calls `memory_context --project` at session start to load recent memories
+- Calls `memory_search <query>` when searching for relevant context
+- Calls `memory_save` to persist decisions, bugs, and learnings
+
+You don't need to prompt Claude to use memory. The MCP tool descriptions instruct it to save and retrieve automatically.
+
+<Tip>
+Use `memory config` to verify your setup and check the effective memory home path.
+</Tip>
+
+## Migration notes
+
+Older versions of EchoVault used hooks in `settings.json`. The setup command now:
+- Removes legacy hooks from `settings.json`
+- Removes `mcpServers` from `settings.json` (moved to dedicated config files)
+- Consolidates everything into `.claude.json` or `.mcp.json`
+
+Re-run `memory setup claude-code` to migrate automatically.

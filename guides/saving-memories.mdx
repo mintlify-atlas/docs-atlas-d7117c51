@@ -1,0 +1,352 @@
+---
+title: Saving Memories
+description: How to save decisions, bugs, patterns, and learnings to your EchoVault memory system
+---
+
+EchoVault captures important decisions, bug fixes, patterns, context, and learnings so future sessions can build on your work. Memories are stored as Markdown files in `~/.memory/vault/` and indexed in SQLite for fast search.
+
+## When to Save Memories
+
+Save memories whenever you:
+
+- Make an architectural or design decision (chose X over Y)
+- Fix a bug (include root cause and solution)
+- Discover a non-obvious pattern or gotcha
+- Learn something about the codebase not obvious from code
+- Set up infrastructure, tooling, or configuration
+- Get corrected by a user or clarify a requirement
+
+<Note>
+**Do NOT save:** trivial changes (typos, formatting), info obvious from reading the code, or duplicates of existing memories.
+</Note>
+
+## Basic Save Command
+
+<Steps>
+  <Step title="Save a simple memory">
+    The minimum required fields are `--title` and `--what`:
+
+    ```bash
+    memory save \
+      --title "Switched to JWT auth" \
+      --what "Replaced session cookies with JWT for stateless auth"
+    ```
+
+    Output:
+    ```
+    Saved: Switched to JWT auth (id: a3f7b2c1)
+    File: /home/user/.memory/vault/my-project/2026-03-03-session.md
+    ```
+  </Step>
+
+  <Step title="Add reasoning and impact">
+    Use `--why` and `--impact` to capture context:
+
+    ```bash
+    memory save \
+      --title "Switched to JWT auth" \
+      --what "Replaced session cookies with JWT" \
+      --why "Needed stateless auth for API" \
+      --impact "All endpoints now require Bearer token"
+    ```
+  </Step>
+
+  <Step title="Categorize and tag">
+    Use `--category` and `--tags` for better organization:
+
+    ```bash
+    memory save \
+      --title "Switched to JWT auth" \
+      --what "Replaced session cookies with JWT" \
+      --why "Needed stateless auth for API" \
+      --impact "All endpoints now require Bearer token" \
+      --category "decision" \
+      --tags "auth,jwt,api"
+    ```
+  </Step>
+</Steps>
+
+## Categories
+
+EchoVault supports five categories:
+
+| Category | Use for |
+|----------|--------|
+| `decision` | Chose X over Y, architectural decisions |
+| `bug` | Fixed a problem, root cause analysis |
+| `pattern` | Reusable gotcha, non-obvious patterns |
+| `learning` | Non-obvious discovery about the codebase |
+| `context` | Project setup, architecture, infrastructure |
+
+## Adding Extended Details
+
+### Inline Details
+
+Use `--details` for extended context:
+
+```bash
+memory save \
+  --title "Chose Redis over Memcached" \
+  --what "Using Redis for caching and pub/sub" \
+  --category "decision" \
+  --details "Context:
+Needed caching + pub/sub for real-time notifications.
+
+Options considered:
+- Option A: Memcached (caching only)
+- Option B: Redis (caching + pub/sub)
+
+Decision:
+Went with Redis to avoid running two systems.
+
+Tradeoffs:
+Slightly more memory overhead, but simpler architecture.
+
+Follow-up:
+Monitor memory usage in production."
+```
+
+### Details from File
+
+For longer details, use `--details-file`:
+
+```bash
+echo "Context:
+Detailed analysis...
+
+Options considered:
+- Option A: ...
+- Option B: ...
+" > notes.md
+
+memory save \
+  --title "Database migration strategy" \
+  --what "Zero-downtime migration plan" \
+  --category "decision" \
+  --details-file notes.md
+```
+
+<Tip>
+Use `--details-file` when saving decisions that include code snippets, stack traces, or multi-paragraph analysis.
+</Tip>
+
+### Structured Details Template
+
+Use `--details-template` to scaffold a structured format:
+
+```bash
+memory save \
+  --title "API versioning strategy" \
+  --what "Decided on URL-based versioning" \
+  --category "decision" \
+  --details-template
+```
+
+This populates `--details` with:
+
+```
+Context:
+
+Options considered:
+- Option A:
+- Option B:
+
+Decision:
+
+Tradeoffs:
+
+Follow-up:
+```
+
+You can then edit the session file directly to fill it in.
+
+## Related Files and Source
+
+Link memories to specific files and track which agent created them:
+
+```bash
+memory save \
+  --title "Fixed N+1 query in user dashboard" \
+  --what "Replaced per-user queries with batch fetch" \
+  --category "bug" \
+  --related-files "src/api/users.ts,src/db/queries.ts" \
+  --source "claude-code"
+```
+
+## Project Scoping
+
+Memories are automatically scoped to the current directory name. To override:
+
+```bash
+memory save \
+  --title "Updated Docker config" \
+  --what "Switched to multi-stage builds" \
+  --project "backend-api"
+```
+
+## Complete Example
+
+<CodeGroup>
+```bash CLI
+memory save \
+  --title "Replaced REST with GraphQL for mobile API" \
+  --what "Migrated mobile endpoints from REST to GraphQL" \
+  --why "Mobile clients needed flexible queries to reduce overfetching" \
+  --impact "Mobile API requests reduced by 60%, bundle size decreased" \
+  --tags "graphql,mobile,api,performance" \
+  --category "decision" \
+  --related-files "src/graphql/schema.ts,src/mobile/api.ts" \
+  --source "cursor" \
+  --details "Context:
+Mobile app was downloading entire user objects when only displaying name + avatar.
+Network payloads were 10x larger than needed.
+
+Options considered:
+- Option A: Add field filtering to REST endpoints
+- Option B: Migrate to GraphQL
+
+Decision:
+GraphQL lets mobile clients request exactly what they need.
+
+Tradeoffs:
+- Pro: Reduced network overhead, faster mobile load times
+- Con: Backend complexity increased, learning curve for team
+
+Follow-up:
+- Monitor query performance in production
+- Add DataLoader to prevent N+1 queries"
+```
+
+```bash Output
+Saved: Replaced REST with GraphQL for mobile API (id: d4e9a1b7)
+File: /home/user/.memory/vault/mobile-app/2026-03-03-session.md
+```
+</CodeGroup>
+
+## Markdown Format
+
+Memories are stored as Markdown with YAML frontmatter. Here's what the session file looks like:
+
+```markdown
+---
+project: mobile-app
+sources: [cursor]
+created: 2026-03-03T14:32:18.123456+00:00
+tags: [api, graphql, mobile, performance]
+---
+
+# 2026-03-03 Session
+
+## Decisions
+
+### Replaced REST with GraphQL for mobile API
+**What:** Migrated mobile endpoints from REST to GraphQL
+**Why:** Mobile clients needed flexible queries to reduce overfetching
+**Impact:** Mobile API requests reduced by 60%, bundle size decreased
+**Source:** cursor
+
+<details>
+Context:
+Mobile app was downloading entire user objects when only displaying name + avatar.
+Network payloads were 10x larger than needed.
+
+Options considered:
+- Option A: Add field filtering to REST endpoints
+- Option B: Migrate to GraphQL
+
+Decision:
+GraphQL lets mobile clients request exactly what they need.
+
+Tradeoffs:
+- Pro: Reduced network overhead, faster mobile load times
+- Con: Backend complexity increased, learning curve for team
+
+Follow-up:
+- Monitor query performance in production
+- Add DataLoader to prevent N+1 queries
+</details>
+```
+
+## CLI Reference
+
+<ParamField path="--title" type="string" required>
+  Short title, max 60 chars
+</ParamField>
+
+<ParamField path="--what" type="string" required>
+  What happened or was learned (1-2 sentences)
+</ParamField>
+
+<ParamField path="--why" type="string">
+  Why it matters or reasoning behind decision
+</ParamField>
+
+<ParamField path="--impact" type="string">
+  Impact or consequences
+</ParamField>
+
+<ParamField path="--tags" type="string">
+  Comma-separated tags (e.g., "auth,jwt,api")
+</ParamField>
+
+<ParamField path="--category" type="string">
+  One of: `decision`, `pattern`, `bug`, `context`, `learning`
+</ParamField>
+
+<ParamField path="--related-files" type="string">
+  Comma-separated file paths
+</ParamField>
+
+<ParamField path="--details" type="string">
+  Extended details or context (use `--details-file` for longer content)
+</ParamField>
+
+<ParamField path="--details-file" type="string">
+  Path to a file containing extended details (cannot be used with `--details`)
+</ParamField>
+
+<ParamField path="--details-template" type="boolean">
+  Use a structured details template (Context, Options, Decision, Tradeoffs, Follow-up)
+</ParamField>
+
+<ParamField path="--source" type="string">
+  Source of the memory (e.g., "claude-code", "cursor", "manual")
+</ParamField>
+
+<ParamField path="--project" type="string">
+  Project name (defaults to current directory name)
+</ParamField>
+
+## Security: Redacting Secrets
+
+<Warning>
+EchoVault has 3-layer redaction to prevent secrets from reaching disk, but you should still be careful when saving memories that reference credentials.
+</Warning>
+
+If you need to reference a sensitive value, wrap it in `<redacted>` tags:
+
+```bash
+memory save \
+  --title "Updated Stripe API key" \
+  --what "Rotated Stripe API key after potential exposure" \
+  --details "Old key: <redacted>sk_live_abc123</redacted>
+New key stored in 1Password vault."
+```
+
+Never use `--details` or `--details-file` to save:
+- API keys
+- Passwords
+- OAuth tokens
+- Private keys
+- Database credentials
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Searching Memories" icon="magnifying-glass" href="/guides/searching">
+    Learn how to search and retrieve saved memories
+  </Card>
+  <Card title="Agent Integration" icon="robot" href="/guides/agent-integration">
+    Use MCP tools to save and search from agents
+  </Card>
+</CardGroup>

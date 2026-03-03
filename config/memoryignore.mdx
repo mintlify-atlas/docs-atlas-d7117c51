@@ -1,0 +1,370 @@
+---
+title: .memoryignore
+description: Add custom redaction rules to protect project-specific sensitive data
+---
+
+EchoVault uses a three-layer redaction system to ensure secrets never reach disk. The `.memoryignore` file lets you define custom regex patterns for Layer 3 — project-specific sensitive data.
+
+## Redaction Layers
+
+EchoVault redacts secrets in three layers:
+
+<Steps>
+  <Step title="Layer 1: Explicit Tags">
+    User-marked sensitive content using `<redacted>` tags:
+
+    ```bash
+    memory save \
+      --title "Added webhook" \
+      --what "Configured Stripe webhook" \
+      --details "Webhook secret: <redacted>whsec_abc123</redacted>"
+    ```
+
+    Anything inside `<redacted>` tags is replaced with `[REDACTED]`.
+  </Step>
+  <Step title="Layer 2: Automatic Patterns">
+    Built-in detection for common secret formats:
+
+    - Stripe keys: `sk_live_*`, `sk_test_*`
+    - GitHub tokens: `ghp_*`
+    - AWS keys: `AKIA*`
+    - Slack tokens: `xoxb-*`
+    - Private keys: `-----BEGIN PRIVATE KEY-----`
+    - JWT tokens: `eyJ*`
+    - Password fields: `password: value`
+    - Secret fields: `secret: value`
+    - API key fields: `api_key: value`
+  </Step>
+  <Step title="Layer 3: Custom Patterns">
+    Project-specific patterns from `.memoryignore`:
+
+    ```regex
+    # SSN pattern
+    \d{3}-\d{2}-\d{4}
+
+    # Internal auth tokens
+    AUTH_TOKEN_[A-Z0-9]+
+    ```
+  </Step>
+</Steps>
+
+All three layers run on every field (`what`, `why`, `impact`, `details`) before writing to disk.
+
+## Creating .memoryignore
+
+Create a `.memoryignore` file in your memory home directory:
+
+```bash
+# Find your memory home
+memory config
+
+# Create .memoryignore
+cd <memory_home>
+touch .memoryignore
+```
+
+Default location: `~/.memory/.memoryignore`
+
+## File Format
+
+The `.memoryignore` file contains regex patterns, one per line:
+
+```regex
+# Comments start with #
+# Empty lines are ignored
+
+# SSN pattern
+\d{3}-\d{2}-\d{4}
+
+# Credit card numbers
+\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}
+
+# Internal auth tokens
+AUTH_TOKEN_[A-Z0-9]+
+
+# Database connection strings
+postgresql://.*
+
+# IP addresses (optional)
+\b(?:\d{1,3}\.){3}\d{1,3}\b
+```
+
+<Note>
+Patterns are interpreted as Python regex. Escape special characters with `\\`.
+</Note>
+
+## Example Patterns
+
+### Social Security Numbers
+
+```regex
+# Format: 123-45-6789
+\d{3}-\d{2}-\d{4}
+```
+
+### Credit Card Numbers
+
+```regex
+# Visa, Mastercard, Amex, Discover
+\b(?:\d{4}[- ]?){3}\d{4}\b
+```
+
+### Email Addresses
+
+```regex
+# Redact internal company emails
+[a-zA-Z0-9._%+-]+@company\.internal
+```
+
+### Internal Tokens
+
+```regex
+# Custom auth format
+INTERNAL_TOKEN_[A-Z0-9]{32}
+
+# Session IDs
+sess_[a-f0-9]{40}
+```
+
+### Database URLs
+
+```regex
+# Postgres
+postgresql://[^\s]+
+
+# MongoDB
+mongodb(?:\+srv)?://[^\s]+
+
+# Redis
+redis://[^\s]+
+```
+
+### IP Addresses
+
+```regex
+# IPv4
+\b(?:\d{1,3}\.){3}\d{1,3}\b
+
+# IPv6
+\b(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}\b
+```
+
+### Hostnames
+
+```regex
+# Internal servers
+[a-z0-9-]+\.company\.internal
+
+# Staging environments
+[a-z0-9-]+\.staging\.company\.com
+```
+
+### Phone Numbers
+
+```regex
+# US format: (123) 456-7890 or 123-456-7890
+\(?\d{3}\)?[- ]?\d{3}[- ]?\d{4}
+```
+
+## Testing Patterns
+
+Test your `.memoryignore` patterns by saving a test memory:
+
+```bash
+memory save \
+  --title "Test redaction" \
+  --what "Testing SSN redaction: 123-45-6789" \
+  --category "context"
+
+memory search "test redaction"
+```
+
+The SSN should appear as `[REDACTED]` in search results.
+
+## Common Use Cases
+
+### Consultant Working with Multiple Clients
+
+```regex
+# Client A patterns
+CLIENTA_SECRET_[A-Z0-9]+
+[a-z]+@clienta\.com
+
+# Client B patterns
+CLIENTB_TOKEN_[A-Z0-9]+
+[a-z]+@clientb\.com
+```
+
+### Open Source Project
+
+```regex
+# Redact contributor emails
+[a-zA-Z0-9._%+-]+@users\.noreply\.github\.com
+
+# Redact local paths
+/Users/[^/]+
+/home/[^/]+
+```
+
+### Financial Services
+
+```regex
+# SSN
+\d{3}-\d{2}-\d{4}
+
+# Credit cards
+\b(?:\d{4}[- ]?){3}\d{4}\b
+
+# Bank account numbers (example)
+\d{10,12}
+
+# Routing numbers
+\d{9}
+```
+
+## Built-in Patterns
+
+You don't need to add these — they're already included in Layer 2:
+
+| Pattern | Example |
+|---------|----------|
+| Stripe live keys | `sk_live_abc123` |
+| Stripe test keys | `sk_test_xyz789` |
+| GitHub tokens | `ghp_abc123xyz` |
+| AWS access keys | `AKIAIOSFODNN7EXAMPLE` |
+| Slack bot tokens | `xoxb-123-456-789` |
+| Private keys | `-----BEGIN RSA PRIVATE KEY-----` |
+| JWT tokens | `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...` |
+| Password fields | `password: secret123` |
+| Secret fields | `secret: abc123` |
+| API key fields | `api_key: xyz789` |
+
+## Redaction Behavior
+
+All matching patterns are replaced with `[REDACTED]`:
+
+**Before redaction:**
+
+```
+Added webhook endpoint with secret whsec_abc123 to handle
+payment events. SSN for test user: 123-45-6789.
+```
+
+**After redaction:**
+
+```
+Added webhook endpoint with secret [REDACTED] to handle
+payment events. SSN for test user: [REDACTED].
+```
+
+## Implementation Details
+
+Redaction happens in `src/memory/redaction.py`:
+
+```python
+def redact(text: str, extra_patterns: Optional[list[str]] = None) -> str:
+    # Layer 1: Explicit <redacted> tags
+    text = REDACTED_TAG_PATTERN.sub("[REDACTED]", text)
+
+    # Layer 2 + 3: Pattern matching
+    all_patterns = SENSITIVE_PATTERNS + (extra_patterns or [])
+    for pattern in all_patterns:
+        text = re.sub(pattern, "[REDACTED]", text, flags=re.IGNORECASE)
+
+    return text
+```
+
+Custom patterns from `.memoryignore` are loaded lazily and cached per session.
+
+## Performance
+
+`.memoryignore` patterns are compiled once per session. Adding many patterns has minimal performance impact.
+
+<Tip>
+Use specific patterns when possible. Overly broad patterns (like `.*secret.*`) may redact more than intended.
+</Tip>
+
+## Troubleshooting
+
+### Pattern Not Working
+
+**Problem**: Data still appears unredacted
+
+**Solution**:
+
+1. Verify `.memoryignore` is in the correct location:
+
+   ```bash
+   memory config  # check memory_home
+   ls <memory_home>/.memoryignore
+   ```
+
+2. Test regex pattern independently:
+
+   ```python
+   import re
+   pattern = r"\d{3}-\d{2}-\d{4}"
+   text = "SSN: 123-45-6789"
+   print(re.sub(pattern, "[REDACTED]", text))
+   ```
+
+3. Check for syntax errors in `.memoryignore`
+
+### Too Much Redacted
+
+**Problem**: Legitimate content is being redacted
+
+**Solution**:
+
+1. Make patterns more specific:
+
+   ```regex
+   # Too broad
+   password.*
+
+   # Better
+   password\s*[:=]\s*["']?.+
+   ```
+
+2. Remove overly broad patterns from `.memoryignore`
+
+### Pattern Syntax Errors
+
+**Problem**: Invalid regex crashes memory save
+
+**Solution**:
+
+1. Validate regex patterns:
+
+   ```python
+   import re
+   try:
+       re.compile(r"your-pattern-here")
+       print("Valid")
+   except re.error as e:
+       print(f"Invalid: {e}")
+   ```
+
+2. Escape special characters: `\\ . * + ? ^ $ { } [ ] ( ) |`
+
+## Security Best Practices
+
+<Warning>
+Redaction is not encryption. Assume redacted data could be reconstructed. Never rely on redaction alone for compliance (PCI, HIPAA, etc.).
+</Warning>
+
+- **Use explicit tags** for highly sensitive data: `<redacted>secret</redacted>`
+- **Test patterns** before committing to shared `.memoryignore`
+- **Review memories** periodically: `memory search "*" | less`
+- **Avoid saving secrets** entirely when possible
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Save Memories" icon="floppy-disk" href="/cli/save">
+    Learn how to save memories with redaction
+  </Card>
+  <Card title="Configuration Overview" icon="gear" href="/config/overview">
+    Review other configuration options
+  </Card>
+</CardGroup>

@@ -1,0 +1,347 @@
+---
+title: Searching Memories
+description: How to search and retrieve memories using hybrid FTS5 + semantic search
+---
+
+EchoVault uses hybrid search combining **FTS5 keyword search** (works out of the box) and **semantic vector search** (requires embeddings). Results are ranked by relevance and returned with compact summaries.
+
+## Basic Search
+
+Search across all projects:
+
+```bash
+memory search "authentication"
+```
+
+**Example output:**
+
+```
+ Results (3 found) 
+
+ [1] Switched to JWT auth (score: 8.42)
+     decision | 2026-03-01 | mobile-app
+     What: Replaced session cookies with JWT for stateless auth
+     Why: Needed stateless auth for API
+     Impact: All endpoints now require Bearer token
+
+ [2] OAuth2 integration for GitHub login (score: 6.21)
+     context | 2026-02-28 | web-app
+     What: Added GitHub OAuth2 for social login
+     Details: available (use `memory details a7d3e4f2`)
+
+ [3] Fixed auth middleware bug (score: 4.89)
+     bug | 2026-02-15 | api-server
+     What: Middleware was not validating token expiry
+     Why: Expired tokens were accepted as valid
+     Impact: Users could access API with expired tokens
+```
+
+## Filtering by Project
+
+Search only in the current project (based on directory name):
+
+```bash
+memory search "database migration" --project
+```
+
+<Tip>
+Use `--project` when working in a monorepo or when you only care about the current codebase.
+</Tip>
+
+## Filtering by Source
+
+Filter memories by which agent created them:
+
+```bash
+memory search "api design" --source cursor
+memory search "refactoring" --source claude-code
+```
+
+This is useful if you use different agents for different tasks (e.g., Cursor for features, Claude for refactoring).
+
+## Adjusting Result Limit
+
+By default, search returns 5 results. Adjust with `--limit`:
+
+```bash
+memory search "error handling" --limit 10
+```
+
+## Getting Full Details
+
+When search results show `Details: available`, use `memory details` to fetch the full content:
+
+<Steps>
+  <Step title="Search for memories">
+    ```bash
+    memory search "caching strategy"
+    ```
+
+    Output:
+    ```
+    [1] Redis vs Memcached decision (score: 9.12)
+        decision | 2026-02-20 | api-server
+        What: Using Redis for caching and pub/sub
+        Details: available (use `memory details b4c8e1a9`)
+    ```
+  </Step>
+
+  <Step title="Fetch full details">
+    ```bash
+    memory details b4c8e1a9
+    ```
+
+    Output:
+    ```
+    Context:
+    Needed caching + pub/sub for real-time notifications.
+
+    Options considered:
+    - Option A: Memcached (caching only)
+    - Option B: Redis (caching + pub/sub)
+
+    Decision:
+    Went with Redis to avoid running two systems.
+
+    Tradeoffs:
+    Slightly more memory overhead, but simpler architecture.
+
+    Follow-up:
+    Monitor memory usage in production.
+    ```
+  </Step>
+</Steps>
+
+<Note>
+You can use the full memory ID or just the first 8-12 characters (e.g., `b4c8e1a9` instead of `b4c8e1a9-d3f2-4a1b-9e8c-7d6f5a4b3c2d`).
+</Note>
+
+## How Search Works
+
+### Keyword Search (FTS5)
+
+Out of the box, EchoVault uses **SQLite FTS5** for full-text keyword search:
+
+- Matches words in title, what, why, impact, and tags
+- Supports prefix matching (e.g., "auth" matches "authentication")
+- Fast even with thousands of memories
+- No configuration needed
+
+### Semantic Search (Embeddings)
+
+If you configure embeddings (Ollama or OpenAI), EchoVault adds **semantic vector search**:
+
+- Matches based on meaning, not just keywords
+- Finds "JWT auth" when you search for "token authentication"
+- Uses `sqlite-vec` for fast vector similarity
+- Requires embeddings setup (see [Configuration](/config/embeddings))
+
+### Hybrid Ranking
+
+When both are available, results are ranked using a weighted combination:
+
+```python
+score = (0.6 * semantic_score) + (0.4 * keyword_score)
+```
+
+This ensures you get results that are both semantically relevant and contain matching keywords.
+
+## Context Mode
+
+Use `memory context` to get a compact list of memories for the current project:
+
+```bash
+memory context --project
+```
+
+**Example output:**
+
+```
+Available memories (12 total, showing 10):
+- [Mar 01] Switched to JWT auth [decision] [auth,jwt]
+- [Feb 28] Added Redis caching [context] [cache,redis]
+- [Feb 25] Fixed N+1 query bug [bug] [performance,database]
+- [Feb 20] GraphQL schema design [decision] [graphql,api]
+- [Feb 18] Docker multi-stage builds [learning] [docker,deploy]
+- [Feb 15] Rate limiting middleware [context] [api,security]
+- [Feb 12] PostgreSQL connection pooling [pattern] [database,postgres]
+- [Feb 10] Error handling strategy [decision] [errors,logging]
+- [Feb 08] Implemented RBAC [context] [auth,permissions]
+- [Feb 05] Migrated to TypeScript [decision] [typescript,refactor]
+
+Use `memory search <query>` for full details on any memory.
+```
+
+### Context Options
+
+<ParamField path="--project" type="boolean">
+  Filter to current project (based on directory name)
+</ParamField>
+
+<ParamField path="--source" type="string">
+  Filter by source (e.g., "cursor", "claude-code")
+</ParamField>
+
+<ParamField path="--limit" type="integer" default="10">
+  Maximum number of memories to show
+</ParamField>
+
+<ParamField path="--query" type="string">
+  Semantic search query for filtering
+</ParamField>
+
+<ParamField path="--semantic" type="boolean">
+  Force semantic search (requires embeddings)
+</ParamField>
+
+<ParamField path="--fts-only" type="boolean">
+  Disable embeddings and use FTS-only
+</ParamField>
+
+<ParamField path="--format" type="string" default="hook">
+  Output format: `hook` or `agents-md`
+</ParamField>
+
+### Semantic Filtering in Context
+
+Use `--query` to filter context results semantically:
+
+```bash
+memory context --project --query "authentication decisions" --limit 5
+```
+
+This is useful when you want recent memories filtered by topic.
+
+## Advanced: Force Search Mode
+
+### Force Semantic Search
+
+If embeddings are configured, force semantic-only search:
+
+```bash
+memory context --project --semantic
+```
+
+This skips keyword search and uses only vector similarity.
+
+### Force Keyword Search
+
+Disable embeddings and use FTS-only:
+
+```bash
+memory context --project --fts-only
+```
+
+Useful for debugging or when embeddings are slow.
+
+## Search from Code
+
+If you're building tools or scripts that need to search memories, use the Python API:
+
+```python
+from memory.core import MemoryService
+
+svc = MemoryService()
+results = svc.search("error handling", limit=5, project="api-server")
+svc.close()
+
+for r in results:
+    print(f"[{r['category']}] {r['title']}")
+    print(f"  {r['what']}")
+    if r.get('has_details'):
+        details = svc.get_details(r['id'])
+        print(f"  Details: {details.body[:100]}...")
+```
+
+## Reindexing
+
+If you change embedding providers or models, reindex your memories:
+
+```bash
+memory reindex
+```
+
+**Example output:**
+
+```
+Reindexing 127 memories with ollama/nomic-embed-text...
+  127/127
+Re-indexed 127 memories with nomic-embed-text (768 dims)
+```
+
+<Warning>
+Reindexing processes every memory through your embedding provider. If you're using a cloud API (OpenAI), this will make multiple API calls and may incur costs.
+</Warning>
+
+## Search Performance
+
+### FTS5 (Keyword Search)
+
+- **Fast:** Less than 10ms for 10,000 memories
+- **No setup:** Works immediately after install
+- **Local:** No API calls
+
+### Semantic Search (Embeddings)
+
+- **Accuracy:** Better for conceptual matches
+- **Setup required:** Needs Ollama or OpenAI configured
+- **Speed:** Depends on embedding provider
+  - Ollama (local): ~50-100ms per query
+  - OpenAI (cloud): ~150-300ms per query
+
+<Tip>
+For the best experience, use **Ollama with `nomic-embed-text`**. It's fast, runs locally, and provides excellent semantic search quality.
+</Tip>
+
+## CLI Reference
+
+### `memory search`
+
+```bash
+memory search <query> [--limit N] [--project] [--source SOURCE]
+```
+
+<ParamField path="query" type="string" required>
+  Search terms or semantic query
+</ParamField>
+
+<ParamField path="--limit" type="integer" default="5">
+  Maximum number of results
+</ParamField>
+
+<ParamField path="--project" type="boolean">
+  Filter to current project (directory name)
+</ParamField>
+
+<ParamField path="--source" type="string">
+  Filter by source (e.g., "cursor", "claude-code")
+</ParamField>
+
+### `memory details`
+
+```bash
+memory details <memory_id>
+```
+
+<ParamField path="memory_id" type="string" required>
+  Full memory ID or prefix (first 8-12 chars)
+</ParamField>
+
+### `memory context`
+
+```bash
+memory context [--project] [--source SOURCE] [--limit N] [--query QUERY] [--semantic] [--fts-only]
+```
+
+See [Context Options](#context-options) above.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Agent Integration" icon="robot" href="/guides/agent-integration">
+    Use MCP tools to search from agents
+  </Card>
+  <Card title="Configuration" icon="gear" href="/config/overview">
+    Set up embeddings for semantic search
+  </Card>
+</CardGroup>

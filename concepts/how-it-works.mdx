@@ -1,0 +1,177 @@
+---
+title: 'How It Works'
+description: 'Architecture and implementation of EchoVault memory system'
+---
+
+## Overview
+
+EchoVault is a local-first memory system that uses a hybrid storage architecture combining human-readable Markdown files with a powerful SQLite database for indexing and search.
+
+## Architecture
+
+The system consists of three main components working together:
+
+```
+~/.memory/
+├── vault/                    # Obsidian-compatible Markdown files
+│   └── my-project/
+│       └── 2026-02-01-session.md
+├── index.db                  # SQLite: FTS5 + sqlite-vec
+└── config.yaml               # Embedding provider config
+```
+
+### 1. Markdown Vault
+
+All memories are stored as human-readable Markdown files organized by project and date:
+
+- One file per session per project
+- Valid Markdown with YAML frontmatter
+- Fully compatible with Obsidian and other Markdown editors
+- Located at `~/.memory/vault/`
+
+<Info>
+The vault uses a session-based file structure where each day's memories for a project are grouped into a single file like `2026-03-03-session.md`.
+</Info>
+
+### 2. SQLite Database
+
+The database (`index.db`) provides fast search and retrieval using two specialized technologies:
+
+**FTS5 (Full-Text Search)**
+- Built-in SQLite extension for keyword search
+- Uses Porter stemming and Unicode normalization
+- Provides BM25 ranking scores
+- Works immediately with zero configuration
+
+**sqlite-vec (Vector Search)**
+- Vector similarity search for semantic queries
+- Dynamically sized based on embedding provider
+- Deferred creation until first embedding is generated
+- Supports dimension mismatch detection
+
+<Note>
+From `~/workspace/source/src/memory/db.py:120-133`, the vec table is created dynamically:
+
+```python
+def _create_vec_table(self, dim: int) -> None:
+    cursor = self.conn.cursor()
+    cursor.execute(f"""
+        CREATE VIRTUAL TABLE IF NOT EXISTS memories_vec USING vec0(
+            rowid INTEGER PRIMARY KEY,
+            embedding float[{dim}]
+        )
+    """)
+```
+</Note>
+
+### 3. Configuration System
+
+The config file (`config.yaml`) controls:
+
+- **Embedding provider**: `ollama` or `openai`
+- **Enrichment**: Optional LLM enhancement of memories
+- **Context behavior**: When to use semantic vs. keyword search
+
+## Memory Save Pipeline
+
+When you save a memory, EchoVault executes a complete processing pipeline:
+
+<Steps>
+  <Step title="Redaction">
+    All text fields pass through the 3-layer redaction system to remove secrets before anything hits disk.
+  </Step>
+  <Step title="Deduplication Check">
+    FTS search looks for similar existing memories in the same project. If a match is found (normalized score greater than or equal to 0.7 and title match), the existing memory is updated instead of creating a duplicate.
+  </Step>
+  <Step title="Markdown File Write">
+    Memory is appended to the session file in the vault directory with proper YAML frontmatter.
+  </Step>
+  <Step title="Database Insert">
+    Memory metadata is inserted into the `memories` table. Details (if present) are stored separately in the `memory_details` table.
+  </Step>
+  <Step title="Embedding Generation">
+    The embedding provider generates a vector from the memory's text. This step is non-fatal - if it fails, the memory is still saved without a vector.
+  </Step>
+  <Step title="Vector Storage">
+    The embedding vector is stored in the `memories_vec` virtual table, linked by rowid.
+  </Step>
+</Steps>
+
+<Tip>
+From `~/workspace/source/src/memory/core.py:286-316`, embeddings are generated from a concatenation of key fields:
+
+```python
+embed_text = f"{mem.title} {mem.what} {mem.why or ''} {mem.impact or ''} {' '.join(mem.tags)}"
+```
+</Tip>
+
+## Compact Pointers
+
+EchoVault uses a "pointer" pattern to minimize token usage in context injection:
+
+- Search results return ~50 tokens: ID, title, category, tags, creation date
+- Full details (potentially thousands of tokens) are only fetched on demand
+- Agents can scan many memories efficiently, then request full details only for relevant ones
+
+## Database Schema
+
+The SQLite database has a carefully designed schema:
+
+### Core Tables
+
+**memories** - Main memory metadata
+- Stores: id, title, what, why, impact, tags, category, project, source, related_files, file_path, section_anchor, created_at, updated_at, updated_count
+- Auto-incrementing rowid used as primary key for joins
+
+**memory_details** - Full memory body text
+- Separated to keep main table compact
+- Only loaded when explicitly requested
+
+**meta** - System metadata
+- Stores embedding dimension and other config
+
+### Virtual Tables
+
+**memories_fts** - FTS5 full-text index
+- Automatically synced with memories table via triggers
+- Tokenizes with Porter stemming and Unicode61
+- Content-less table (references memories via rowid)
+
+**memories_vec** - Vector embeddings
+- Created dynamically when first embedding is generated
+- Dimension stored in meta table for validation
+
+<Info>
+From `~/workspace/source/src/memory/db.py:81-95`, FTS triggers automatically keep the index in sync:
+
+```sql
+CREATE TRIGGER IF NOT EXISTS memories_ai AFTER INSERT ON memories BEGIN
+    INSERT INTO memories_fts(rowid, title, what, why, impact, tags, category, project, source)
+    VALUES (new.rowid, new.title, new.what, new.why, new.impact, new.tags, new.category, new.project, new.source);
+END
+```
+</Info>
+
+## Zero Idle Cost
+
+EchoVault has no background processes:
+
+- No daemon running in the background
+- No RAM overhead when not in use
+- MCP server only runs when an agent starts it
+- Database connection opened on-demand
+
+## Cross-Agent Memory Sharing
+
+All agents (Claude Code, Cursor, Codex, OpenCode) share the same memory vault:
+
+- Memories saved by one agent are immediately searchable by others
+- The `source` field tracks which agent created each memory
+- Filtering by source is optional - by default all memories are searchable
+
+<Note>
+The memory home location is controlled by:
+1. `MEMORY_HOME` environment variable (highest priority)
+2. Persistent config via `memory config set-home`
+3. Default: `~/.memory`
+</Note>

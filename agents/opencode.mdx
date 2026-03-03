@@ -1,0 +1,152 @@
+---
+title: OpenCode
+description: Set up EchoVault for OpenCode with global or project-scoped memory.
+---
+
+OpenCode integrates with EchoVault via MCP. One command installs the MCP server entry, and OpenCode automatically uses memory tools during sessions.
+
+## Installation
+
+<Steps>
+  <Step title="Install EchoVault">
+    ```bash
+    pip install git+https://github.com/mraza007/echovault.git
+    memory init
+    ```
+  </Step>
+
+  <Step title="Run setup">
+    ```bash
+    memory setup opencode
+    ```
+
+    This writes the MCP server config to `~/.config/opencode/opencode.json`.
+  </Step>
+
+  <Step title="Restart OpenCode">
+    Restart OpenCode to load the new MCP server.
+  </Step>
+</Steps>
+
+## What gets installed
+
+The setup command adds an `mcp` entry to `~/.config/opencode/opencode.json`:
+
+```json
+{
+  "mcp": {
+    "echovault": {
+      "type": "local",
+      "command": ["memory", "mcp"]
+    }
+  }
+}
+```
+
+OpenCode spawns `memory mcp` at session start and gains access to three tools:
+- `memory_save`
+- `memory_search`
+- `memory_context`
+
+<Note>
+OpenCode uses a different MCP config schema than Claude Code and Cursor. The setup command handles this automatically.
+</Note>
+
+## Project-scoped installation
+
+To install memory for a specific project instead of globally:
+
+```bash
+cd ~/my-project
+memory setup opencode --project
+```
+
+This writes `opencode.json` in the project root instead of `~/.config/opencode/opencode.json`. OpenCode loads project-local config when available.
+
+<CodeGroup>
+```bash Global (default)
+memory setup opencode
+# Writes to: ~/.config/opencode/opencode.json
+```
+
+```bash Project-scoped
+cd ~/my-project
+memory setup opencode --project
+# Writes to: opencode.json
+```
+</CodeGroup>
+
+## Config file locations
+
+| Scope | Config file | Used when |
+|-------|-------------|----------|
+| Global | `~/.config/opencode/opencode.json` | No project-local config exists |
+| Project | `opencode.json` | Present in project root |
+
+<Warning>
+If both files exist, OpenCode prioritizes the project-local `opencode.json`.
+</Warning>
+
+## Uninstalling
+
+To remove EchoVault from OpenCode:
+
+```bash
+memory uninstall opencode
+```
+
+This removes the `echovault` entry from `~/.config/opencode/opencode.json`. For project-scoped installs:
+
+```bash
+memory uninstall opencode --project
+```
+
+This removes the entry from `opencode.json`.
+
+<Tip>
+Your memory vault at `~/.memory/vault/` is not deleted. Only the MCP config is removed.
+</Tip>
+
+## Usage
+
+Once installed, OpenCode automatically:
+- Calls `memory_context --project` at session start to load recent memories
+- Calls `memory_search <query>` when searching for relevant context
+- Calls `memory_save` to persist decisions, bugs, and learnings
+
+You don't need to prompt OpenCode to use memory. The MCP tool descriptions instruct it to save and retrieve automatically.
+
+<Tip>
+Use `memory config` to verify your setup and check the effective memory home path.
+</Tip>
+
+## OpenCode MCP schema
+
+OpenCode uses a different MCP config format than other agents:
+
+```json
+{
+  "mcp": {
+    "echovault": {
+      "type": "local",
+      "command": ["memory", "mcp"]
+    }
+  }
+}
+```
+
+Compare this to Claude Code and Cursor:
+
+```json
+{
+  "mcpServers": {
+    "echovault": {
+      "command": "memory",
+      "args": ["mcp"],
+      "type": "stdio"
+    }
+  }
+}
+```
+
+The setup command handles this schema difference automatically.

@@ -1,0 +1,208 @@
+---
+title: Installation
+description: Install EchoVault and configure it for your coding agent
+---
+
+# Installation
+
+Get EchoVault running in under 2 minutes.
+
+## Install EchoVault
+
+<Steps>
+  <Step title="Install from GitHub">
+    EchoVault requires Python 3.10 or higher.
+
+    ```bash
+    pip install git+https://github.com/mraza007/echovault.git
+    ```
+
+    This installs the `memory` CLI globally.
+  </Step>
+
+  <Step title="Initialize the memory vault">
+    Create the vault directory where memories will be stored:
+
+    ```bash
+    memory init
+    ```
+
+    This creates `~/.memory/vault/` for storing Markdown session files and `~/.memory/index.db` for the SQLite search index.
+  </Step>
+
+  <Step title="Configure your agent">
+    Run the setup command for your agent. This installs the MCP server configuration automatically.
+
+    <CodeGroup>
+      ```bash Claude Code
+      memory setup claude-code
+      ```
+
+      ```bash Cursor
+      memory setup cursor
+      ```
+
+      ```bash Codex
+      memory setup codex
+      ```
+
+      ```bash OpenCode
+      memory setup opencode
+      ```
+    </CodeGroup>
+
+    By default, the config is installed globally. To install for a specific project instead:
+
+    ```bash
+    cd ~/my-project
+    memory setup claude-code --project   # writes .mcp.json in project root
+    memory setup opencode --project      # writes opencode.json in project root
+    memory setup codex --project         # writes .codex/config.toml + AGENTS.md
+    ```
+  </Step>
+</Steps>
+
+That's it. Your agent now has access to `memory_save`, `memory_search`, and `memory_context` tools via MCP.
+
+## Configure embeddings (optional)
+
+Embeddings enable semantic search. Without them, you still get fast keyword search via FTS5.
+
+<Steps>
+  <Step title="Generate a starter config">
+    ```bash
+    memory config init
+    ```
+
+    This creates `~/.memory/config.yaml` with sensible defaults.
+  </Step>
+
+  <Step title="Edit the config">
+    Open `~/.memory/config.yaml` and configure your embedding provider:
+
+    <CodeGroup>
+      ```yaml Ollama (local)
+      embedding:
+        provider: ollama
+        model: nomic-embed-text
+        # base_url: http://localhost:11434
+
+      enrichment:
+        provider: none
+
+      context:
+        semantic: auto
+        topup_recent: true
+      ```
+
+      ```yaml OpenAI (cloud)
+      embedding:
+        provider: openai
+        model: text-embedding-3-small
+        base_url: https://api.openai.com/v1
+        api_key: sk-...
+
+      enrichment:
+        provider: none
+
+      context:
+        semantic: auto
+        topup_recent: true
+      ```
+
+      ```yaml vLLM (on-prem)
+      embedding:
+        provider: openai
+        model: your-vllm-embedding-model
+        base_url: http://vllm.your-company.internal:8000/v1
+        # api_key: <optional>
+
+      enrichment:
+        provider: none
+
+      context:
+        semantic: auto
+        topup_recent: true
+      ```
+    </CodeGroup>
+  </Step>
+
+  <Step title="Reindex existing memories (if any)">
+    If you already have memories saved and want to add embeddings:
+
+    ```bash
+    memory reindex
+    ```
+
+    This rebuilds the vector index with your new embedding provider.
+  </Step>
+</Steps>
+
+<Note>
+  **What each config section does:**
+  - `embedding` — How memories get turned into vectors for semantic search. `ollama` runs locally, `openai` calls cloud APIs.
+  - `enrichment` — Optional LLM step that enhances memories before storing (better summaries, auto-tags). Set to `none` to skip.
+  - `context` — Controls how memories are retrieved at session start. `auto` uses vector search when embeddings are available, falls back to keywords. `topup_recent` also includes recent memories.
+</Note>
+
+## Configure memory location (optional)
+
+By default, EchoVault stores data in `~/.memory`. You can change this in two ways:
+
+- `MEMORY_HOME=/path/to/memory` (highest priority, per-shell/per-process)
+- `memory config set-home /path/to/memory` (persistent default)
+
+```bash
+memory config set-home /path/to/memory
+memory config clear-home
+memory config
+```
+
+`memory config` shows both `memory_home` and `memory_home_source` (`env`, `config`, or `default`).
+
+## Verify installation
+
+Check that everything is configured correctly:
+
+```bash
+memory config
+```
+
+You should see your effective configuration, including `memory_home` and any embedding provider settings.
+
+## What gets installed
+
+| Agent | Setup command | What gets installed |
+|-------|-------------|---------------------|
+| Claude Code | `memory setup claude-code` | MCP server in `.mcp.json` (project) or `~/.claude.json` (global) |
+| Cursor | `memory setup cursor` | MCP server in `.cursor/mcp.json` |
+| Codex | `memory setup codex` | MCP server in `.codex/config.toml` + `AGENTS.md` fallback |
+| OpenCode | `memory setup opencode` | MCP server in `opencode.json` (project) or `~/.config/opencode/opencode.json` (global) |
+
+All agents share the same memory vault at your effective `memory_home` path (default `~/.memory/`).
+
+## Uninstall
+
+To remove EchoVault from an agent:
+
+```bash
+memory uninstall claude-code   # or: cursor, codex, opencode
+```
+
+To uninstall the package:
+
+```bash
+pip uninstall echovault
+```
+
+To also remove all stored memories:
+
+```bash
+rm -rf ~/.memory/
+```
+
+## Next steps
+
+<Card title="Quick start" icon="rocket" href="/quickstart">
+  Save your first memory and see how agents use it
+</Card>

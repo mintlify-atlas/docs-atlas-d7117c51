@@ -1,0 +1,539 @@
+---
+title: Frequently Asked Questions
+description: Common questions about EchoVault
+---
+
+Answers to common questions about EchoVault's features, architecture, and usage.
+
+## General
+
+<AccordionGroup>
+  <Accordion title="What is EchoVault?">
+    EchoVault is a local-first memory system for coding agents. It gives agents like Claude Code, Cursor, Codex, and OpenCode the ability to remember decisions, bugs, and context across sessions.
+
+    Unlike cloud-based memory systems, EchoVault stores everything locally by default. Your memories live as Markdown files in `~/.memory/vault/` and are indexed in a local SQLite database.
+  </Accordion>
+
+  <Accordion title="Why did you build this?">
+    Coding agents forget everything between sessions. They re-discover the same patterns, repeat the same mistakes, and forget decisions made yesterday.
+
+    Existing tools like Supermemory and Claude Mem didn't fit the use case:
+    - **Supermemory** stores everything in the cloud (deal breaker for consulting work with multiple companies)
+    - **Claude Mem** caused high memory consumption, making it hard to run multiple agent sessions simultaneously
+
+    EchoVault solves this with local storage, zero idle cost, and cross-agent memory sharing.
+  </Accordion>
+
+  <Accordion title="Is EchoVault free?">
+    Yes. EchoVault itself is free and open source (MIT license).
+
+    However, if you choose to use OpenAI for embeddings, you'll pay for their API usage. Alternatively, you can use Ollama locally for completely free operation.
+  </Accordion>
+</AccordionGroup>
+
+## Local-First Architecture
+
+<AccordionGroup>
+  <Accordion title="What does 'local-first' mean?">
+    Local-first means:
+    - All memories are stored on your machine in `~/.memory/`
+    - No cloud database, no remote storage
+    - Memories are human-readable Markdown files
+    - You own your data completely
+
+    The only network calls are optional:
+    - If you configure OpenAI for embeddings, those API calls go to their servers
+    - If you use Ollama (default), everything runs locally with zero network calls
+
+    You can use EchoVault completely offline with Ollama.
+  </Accordion>
+
+  <Accordion title="Can I access my memories on multiple machines?">
+    Yes, but you need to sync the `~/.memory/` directory yourself.
+
+    **Options:**
+    - Use a cloud storage service (Dropbox, iCloud, Google Drive)
+    - Use Git to version control your vault
+    - Use rsync or syncthing for manual sync
+    - Point `MEMORY_HOME` to a network mount
+
+    **Example with Dropbox:**
+    ```bash
+    # On each machine
+    memory config set-home ~/Dropbox/memory
+    ```
+
+    Now all machines share the same memory vault.
+
+    <Warning>
+      Be careful with concurrent access. SQLite doesn't handle simultaneous writes well. Avoid running agents on multiple machines at the exact same time.
+    </Warning>
+  </Accordion>
+
+  <Accordion title="Where are memories stored?">
+    By default, `~/.memory/` contains:
+
+    ```
+    ~/.memory/
+    ├── vault/              # Markdown files organized by project
+    │   └── my-project/
+    │       └── 2026-03-03-session.md
+    ├── index.db            # SQLite database (FTS5 + vectors)
+    ├── config.yaml         # Embedding provider config
+    └── .memoryignore       # Custom redaction patterns
+    ```
+
+    You can change this location:
+    ```bash
+    memory config set-home /path/to/memory
+    ```
+
+    Or set per-session:
+    ```bash
+    export MEMORY_HOME=/path/to/memory
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Obsidian Compatibility
+
+<AccordionGroup>
+  <Accordion title="Can I read memories in Obsidian?">
+    Yes! Memory files are standard Markdown with YAML frontmatter.
+
+    **Setup:**
+    1. Open Obsidian
+    2. Open folder: `~/.memory/vault/`
+    3. Browse your memories like any other Obsidian vault
+
+    Each memory appears as a note with:
+    - Title as the note heading
+    - Metadata in frontmatter (category, tags, timestamps)
+    - Decision details in the body
+
+    <Info>
+      You can use Obsidian's graph view, search, and linking features on your memory vault.
+    </Info>
+  </Accordion>
+
+  <Accordion title="Can I edit memories in Obsidian?">
+    You can edit them, but changes won't sync back to the database.
+
+    **Why:** The SQLite database (`index.db`) is the source of truth for search and embeddings. Editing markdown files bypasses the database layer.
+
+    **Best practice:**
+    - Use Obsidian for **reading and browsing**
+    - Use `memory save` for creating and updating memories
+
+    If you need to update a memory, use the CLI:
+    ```bash
+    memory save --title "Updated title" ...
+    ```
+
+    The deduplication logic will detect similar memories and update the existing entry.
+  </Accordion>
+
+  <Accordion title="Can I use Obsidian plugins with EchoVault?">
+    Yes! Since memories are standard Markdown, most Obsidian plugins work:
+
+    **Recommended plugins:**
+    - **Dataview** - Query memories by tag, category, or date
+    - **Calendar** - View memories by creation date
+    - **Tag Wrangler** - Manage memory tags
+    - **Advanced Tables** - If you add tables to memory details
+
+    **Example Dataview query:**
+    ````markdown
+    ```dataview
+    TABLE category, tags
+    FROM ""
+    WHERE contains(category, "decision")
+    SORT file.ctime DESC
+    ```
+    ````
+
+    This lists all decision memories, sorted by creation date.
+  </Accordion>
+</AccordionGroup>
+
+## Multi-Agent Usage
+
+<AccordionGroup>
+  <Accordion title="Can multiple agents share the same memory vault?">
+    Yes! This is one of EchoVault's core features.
+
+    **Setup:**
+    ```bash
+    memory setup claude-code
+    memory setup cursor
+    memory setup opencode
+    memory setup codex
+    ```
+
+    All agents now share the same vault at `~/.memory/`. A memory saved by Claude Code is instantly searchable by Cursor, Codex, and OpenCode.
+
+    **Source tracking:**
+    Each memory records which agent created it via the `source` field. You can filter by source:
+    ```bash
+    memory search "auth" --source claude-code
+    ```
+  </Accordion>
+
+  <Accordion title="What happens if two agents save at the same time?">
+    SQLite handles concurrent reads well but can have issues with simultaneous writes.
+
+    **In practice:**
+    - If two agents save to different projects: usually fine
+    - If two agents save to the same project at the exact same moment: one may get a "database locked" error
+
+    The memory system is designed for sequential agent sessions, not true concurrency.
+
+    <Note>
+      If you encounter "database locked" errors, wait a moment and try again. The lock is temporary.
+    </Note>
+  </Accordion>
+
+  <Accordion title="Can I use different embedding providers for different agents?">
+    No. All agents share the same config at `~/.memory/config.yaml`.
+
+    **Why:** The vector dimension must be consistent across all embeddings in the database. Mixing providers would cause dimension mismatches.
+
+    **Workaround:**
+    Use separate memory homes for different agent groups:
+    ```bash
+    # Shell 1: Claude Code with OpenAI
+    export MEMORY_HOME=~/.memory-openai
+    memory config init  # Set provider to openai
+
+    # Shell 2: Cursor with Ollama
+    export MEMORY_HOME=~/.memory-ollama
+    memory config init  # Set provider to ollama
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Search and Retrieval
+
+<AccordionGroup>
+  <Accordion title="How does hybrid search work?">
+    EchoVault uses a tiered search strategy:
+
+    1. **FTS5 keyword search** runs first (fast, works offline)
+    2. If results are sparse or a semantic mode is enabled, **vector search** runs
+    3. Results are merged with normalized scores
+
+    **Keyword search (FTS5):**
+    - Works out of the box, no configuration needed
+    - Uses Porter stemming and Unicode tokenization
+    - Fast, but only matches exact words or stems
+
+    **Vector search (semantic):**
+    - Requires embedding provider (Ollama or OpenAI)
+    - Understands meaning, not just keywords
+    - Slower, but finds conceptually similar memories
+
+    **Configuration:**
+    ```yaml
+    context:
+      semantic: auto      # auto | always | never
+      topup_recent: true  # Include recent memories
+    ```
+
+    - `auto` - Use vectors if Ollama model is loaded, otherwise keywords
+    - `always` - Always use vectors (may be slow)
+    - `never` - Keywords only (fastest)
+  </Accordion>
+
+  <Accordion title="What's the difference between memory search and memory context?">
+    **`memory search <query>`**
+    - Searches all memories (or filtered by project/source)
+    - Returns ranked results by relevance
+    - Used during agent work to find specific memories
+
+    **`memory context`**
+    - Returns recent memories for a project
+    - Used at session start to load prior context
+    - Can optionally use a query for semantic filtering
+
+    **Example workflow:**
+    ```bash
+    # At session start
+    memory context --project
+
+    # During work, when agent needs specific info
+    memory search "jwt authentication"
+
+    # Get full details
+    memory details a3f9b2c1
+    ```
+  </Accordion>
+
+  <Accordion title="Why does search sometimes return fewer results than expected?">
+    Several reasons:
+
+    1. **Project filtering** - By default, searches are scoped to the current project
+    2. **FTS5 tokenization** - Technical terms may not match exactly
+    3. **Limit parameter** - Default limit is 5 results
+
+    **Solutions:**
+    ```bash
+    # Search all projects
+    memory search "query" --all
+
+    # Increase result limit
+    memory search "query" --limit 20
+
+    # Try different search terms
+    memory search "JWT"          # Might not match "jwt"
+    memory search "authentication"  # Broader term
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Embedding Providers
+
+<AccordionGroup>
+  <Accordion title="Should I use Ollama or OpenAI for embeddings?">
+    **Use Ollama if:**
+    - You want fully local operation (no cloud calls)
+    - You have GPU or decent CPU
+    - You want zero ongoing cost
+    - You work offline or with sensitive data
+
+    **Use OpenAI if:**
+    - You don't want to run local models
+    - You need the highest quality embeddings
+    - You're okay with cloud API calls
+    - You already have OpenAI credits
+
+    **Performance comparison:**
+    - **Ollama (nomic-embed-text):** ~384 dimensions, very fast locally
+    - **OpenAI (text-embedding-3-small):** ~1536 dimensions, higher quality but network latency
+
+    <Info>
+      You can start with Ollama and switch to OpenAI later (or vice versa). Just run `memory reindex` after changing providers.
+    </Info>
+  </Accordion>
+
+  <Accordion title="Can I use a custom embedding model?">
+    Yes, if it's OpenAI-compatible.
+
+    EchoVault supports any API that follows the OpenAI embedding format:
+
+    **Example: vLLM on-premises**
+    ```yaml
+    embedding:
+      provider: openai
+      model: your-custom-model
+      base_url: http://vllm.internal:8000/v1
+      api_key: optional
+    ```
+
+    **Example: Azure OpenAI**
+    ```yaml
+    embedding:
+      provider: openai
+      model: text-embedding-ada-002
+      base_url: https://your-resource.openai.azure.com/openai/deployments/your-deployment/embeddings?api-version=2023-05-15
+      api_key: your-azure-key
+    ```
+
+    For Ollama, you can use any model supported by `ollama pull`:
+    ```bash
+    ollama pull mxbai-embed-large
+    ```
+
+    Then update `config.yaml`:
+    ```yaml
+    embedding:
+      provider: ollama
+      model: mxbai-embed-large
+    ```
+  </Accordion>
+
+  <Accordion title="What happens if I don't configure embeddings?">
+    You can use EchoVault without embeddings.
+
+    **What you lose:**
+    - Semantic vector search
+    - Conceptual similarity matching
+
+    **What you keep:**
+    - Keyword search via FTS5 (fast and effective)
+    - All storage and retrieval features
+    - Full MCP integration
+
+    Many users start without embeddings and add them later when needed.
+
+    ```bash
+    # Initialize without embeddings
+    memory init
+    memory save --title "Test" --what "Example memory"
+    memory search "test"  # Works with FTS5
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Security and Privacy
+
+<AccordionGroup>
+  <Accordion title="How does secret redaction work?">
+    EchoVault uses a 3-layer redaction pipeline to prevent secrets from being stored:
+
+    **Layer 1: Explicit tags**
+    Wrap sensitive data in `<redacted>` tags:
+    ```bash
+    memory save --title "API Setup" \
+      --what "Configured API key <redacted>sk_live_abc123</redacted>"
+    ```
+
+    **Layer 2: Automatic pattern detection**
+    Known secret formats are automatically redacted:
+    - `sk_live_*` - Stripe live keys
+    - `ghp_*` - GitHub tokens
+    - `AKIA*` - AWS access keys
+    - `-----BEGIN PRIVATE KEY-----` - Private keys
+    - JWT tokens, passwords, API keys, etc.
+
+    **Layer 3: Custom patterns**
+    Add project-specific patterns to `~/.memory/.memoryignore`:
+    ```
+    # SSN pattern
+    \d{3}-\d{2}-\d{4}
+
+    # Internal IP addresses
+    10\.0\.\d+\.\d+
+    ```
+
+    All redacted content is replaced with `[REDACTED]` before storage.
+  </Accordion>
+
+  <Accordion title="Can I see what would be redacted before saving?">
+    Not directly, but you can test the redaction patterns:
+
+    ```python
+    from memory.redaction import redact, load_memoryignore
+
+    patterns = load_memoryignore("/home/user/.memory/.memoryignore")
+    text = "API key: sk_live_abc123"
+    print(redact(text, patterns))
+    # Output: API key: [REDACTED]
+    ```
+
+    <Warning>
+      Always review memory content before saving. While redaction is thorough, it's not foolproof. Don't rely solely on automatic redaction for highly sensitive data.
+    </Warning>
+  </Accordion>
+</AccordionGroup>
+
+## Project and File Management
+
+<AccordionGroup>
+  <Accordion title="How are projects detected?">
+    By default, EchoVault uses the current directory name as the project name.
+
+    ```bash
+    cd ~/code/my-app
+    memory save --title "Test"  # Saved to project "my-app"
+
+    cd ~/code/other-app
+    memory context --project    # Shows memories for "other-app"
+    ```
+
+    You can override this with `--project`:
+    ```bash
+    memory save --title "Test" --project "custom-name"
+    ```
+  </Accordion>
+
+  <Accordion title="Can I organize memories into subdirectories?">
+    Not currently. All memories for a project are stored in:
+    ```
+    ~/.memory/vault/project-name/YYYY-MM-DD-session.md
+    ```
+
+    Memories are appended to the current day's session file.
+
+    If you want more granular organization, use:
+    - **Tags** - `--tags "frontend,auth,bug"`
+    - **Categories** - `--category "decision"`
+    - **Related files** - `--related-files "src/auth.ts"`
+
+    These fields are searchable and appear in memory metadata.
+  </Accordion>
+
+  <Accordion title="What happens to old session files?">
+    Nothing! EchoVault never deletes files.
+
+    Session files accumulate over time:
+    ```
+    ~/.memory/vault/my-project/
+    ├── 2026-03-01-session.md
+    ├── 2026-03-02-session.md
+    └── 2026-03-03-session.md
+    ```
+
+    You can manually delete old files if needed. The SQLite database will still contain indexed entries, but search won't return them if the file is deleted.
+
+    To fully delete a memory:
+    ```bash
+    memory delete <id>
+    ```
+
+    This removes it from the database and doesn't add to the markdown file.
+  </Accordion>
+</AccordionGroup>
+
+## Advanced Usage
+
+<AccordionGroup>
+  <Accordion title="Can I use EchoVault in CI/CD?">
+    Yes, but be cautious.
+
+    **Use cases:**
+    - Pre-seed memory vault with project context for agents
+    - Export memory summaries as documentation
+    - Validate that agents are saving memories correctly
+
+    **Example: Pre-seed memories**
+    ```bash
+    memory save --title "Build Process" \
+      --what "Use pnpm for package management" \
+      --why "Faster and more deterministic than npm" \
+      --project "my-app"
+    ```
+
+    **Caution:**
+    - Don't commit `~/.memory/` to Git (contains local paths and potentially sensitive data)
+    - Use `MEMORY_HOME` to point to a project-specific location
+    - Be mindful of secrets in CI logs
+  </Accordion>
+
+  <Accordion title="Can I export memories to JSON or other formats?">
+    Not directly, but you can query the SQLite database:
+
+    ```bash
+    sqlite3 ~/.memory/index.db "SELECT * FROM memories WHERE project='my-app'" -json
+    ```
+
+    Or use Python:
+    ```python
+    from memory.core import MemoryService
+
+    service = MemoryService()
+    results = service.search("query", limit=100)
+    print(results)
+    ```
+
+    The markdown files are already human-readable and can be processed with any Markdown parser.
+  </Accordion>
+</AccordionGroup>
+
+## Still Have Questions?
+
+If your question isn't answered here:
+
+1. Check the [Troubleshooting guide](/troubleshooting) for technical issues
+2. Review the [Privacy documentation](/privacy) for security concerns
+3. Browse [GitHub Issues](https://github.com/mraza007/echovault/issues) for similar questions
+4. Open a new issue if you're stuck

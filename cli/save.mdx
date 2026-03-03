@@ -1,0 +1,174 @@
+---
+title: 'memory save'
+description: 'Save a memory to the vault'
+---
+
+## Overview
+
+The `memory save` command stores a memory in your vault. Memories can capture decisions, patterns, bugs, context, or learnings with structured metadata.
+
+## Syntax
+
+```bash
+memory save --title "Title" --what "Description" [OPTIONS]
+```
+
+## Required Options
+
+<ParamField path="--title" type="string" required>
+  Title of the memory. Keep it concise and descriptive.
+</ParamField>
+
+<ParamField path="--what" type="string" required>
+  What happened or was learned. The core content of the memory.
+</ParamField>
+
+## Optional Options
+
+<ParamField path="--why" type="string">
+  Why it matters. Explanation of the reasoning or importance.
+</ParamField>
+
+<ParamField path="--impact" type="string">
+  Impact or consequences. What changed as a result.
+</ParamField>
+
+<ParamField path="--tags" type="string">
+  Comma-separated tags for categorization (e.g., `auth,security,api`).
+</ParamField>
+
+<ParamField path="--category" type="choice">
+  Category of the memory. One of: `decision`, `pattern`, `bug`, `context`, `learning`.
+</ParamField>
+
+<ParamField path="--related-files" type="string">
+  Comma-separated file paths related to this memory.
+</ParamField>
+
+<ParamField path="--details" type="string">
+  Extended details or context. Use for longer explanations.
+</ParamField>
+
+<ParamField path="--details-file" type="string">
+  Path to a file containing extended details. Cannot be used with `--details`.
+</ParamField>
+
+<ParamField path="--details-template" type="flag">
+  Populate `--details` with a structured template for decisions.
+</ParamField>
+
+<ParamField path="--source" type="string">
+  Source of the memory (e.g., agent name like `cursor`, `claude`, `codex`).
+</ParamField>
+
+<ParamField path="--project" type="string">
+  Project name. Defaults to the current directory name.
+</ParamField>
+
+## Examples
+
+### Save a simple memory
+
+```bash
+memory save \
+  --title "JWT expiry set to 7 days" \
+  --what "Changed token expiration from 24h to 7d for better UX"
+```
+
+**Output:**
+```
+Saved: JWT expiry set to 7 days (id: a3f9c8d2e1b4)
+File: /home/user/.memory/vault/myproject/2026-03-03-a3f9c8d2e1b4.md
+```
+
+### Save with full metadata
+
+```bash
+memory save \
+  --title "Switched to connection pooling" \
+  --what "Implemented PostgreSQL connection pooling with max 20 connections" \
+  --why "Previous approach was creating too many connections under load" \
+  --impact "Reduced DB connection overhead by 60%, improved response time" \
+  --category decision \
+  --tags "database,performance,postgres" \
+  --related-files "src/db/pool.ts,src/config.ts"
+```
+
+### Save with extended details from file
+
+```bash
+memory save \
+  --title "Rate limiting strategy" \
+  --what "Added per-user and per-IP rate limits" \
+  --category decision \
+  --details-file ./decision.md
+```
+
+### Save with decision template
+
+```bash
+memory save \
+  --title "API versioning approach" \
+  --what "Using URL path versioning (v1, v2)" \
+  --category decision \
+  --details-template
+```
+
+This will populate the `--details` field with:
+
+```
+Context:
+
+Options considered:
+- Option A:
+- Option B:
+
+Decision:
+
+Tradeoffs:
+
+Follow-up:
+```
+
+### Save from an agent
+
+```bash
+memory save \
+  --title "Fixed null pointer in auth middleware" \
+  --what "Added null check before accessing user.role" \
+  --category bug \
+  --source cursor \
+  --related-files "src/middleware/auth.ts"
+```
+
+## Output
+
+On success, the command displays:
+- The memory title
+- The generated memory ID (12-character prefix)
+- The file path where the memory was saved
+- Any warnings (e.g., if embeddings couldn't be generated)
+
+## Details Template Structure
+
+When using `--details-template`, you get a structured format ideal for documenting decisions:
+
+- **Context**: Background and why this decision was needed
+- **Options considered**: List alternative approaches
+- **Decision**: What was decided
+- **Tradeoffs**: Pros/cons of the chosen approach
+- **Follow-up**: Future actions or considerations
+
+## Related Commands
+
+- [`memory search`](/cli/search) - Find saved memories
+- [`memory details`](/cli/details) - View full details of a memory
+- [`memory delete`](/cli/delete) - Remove a memory
+
+<Tip>
+Use `--category decision` with `--details-template` to create well-structured decision records.
+</Tip>
+
+<Note>
+Never include API keys, secrets, or credentials in any memory field. Use `<redacted>` placeholders if you need to reference them.
+</Note>

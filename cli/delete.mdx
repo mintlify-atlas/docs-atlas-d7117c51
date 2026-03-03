@@ -1,0 +1,165 @@
+---
+title: 'memory delete'
+description: 'Delete a memory by ID or prefix'
+---
+
+## Overview
+
+The `memory delete` command permanently removes a memory from the vault. The memory file and all associated data (including embeddings) are deleted.
+
+## Syntax
+
+```bash
+memory delete <memory-id>
+```
+
+## Arguments
+
+<ParamField path="memory-id" type="string" required>
+  The memory ID or ID prefix. You can use the full ID or just the first 12 characters.
+</ParamField>
+
+## Examples
+
+### Delete using ID prefix
+
+```bash
+memory delete a3f9c8d2e1b4
+```
+
+**Output:**
+```
+Deleted memory a3f9c8d2e1b4
+```
+
+### Delete using full ID
+
+```bash
+memory delete a3f9c8d2e1b4-7a8b-4c5d-9e0f-1g2h3i4j5k6l
+```
+
+### When memory doesn't exist
+
+```bash
+memory delete nonexistent123
+```
+
+**Output:**
+```
+No memory found for nonexistent123
+```
+
+## Workflow: Find and Delete
+
+Typical workflow to delete a memory:
+
+### 1. Find the memory
+
+```bash
+memory search "old decision"
+```
+
+**Output:**
+```
+ Results (1 found) 
+
+ [1] Deprecated API approach (score: 0.92)
+     decision | 2025-01-15 | oldproject
+     What: Using REST API v1
+```
+
+### 2. Get the ID from search or file
+
+```bash
+ls ~/.memory/vault/oldproject/
+# Shows: 2025-01-15-b4c6d8e0f2a1.md
+```
+
+### 3. Delete the memory
+
+```bash
+memory delete b4c6d8e0f2a1
+```
+
+## What Gets Deleted
+
+When you delete a memory:
+
+1. **Memory file**: The `.md` file in `vault/project/` is removed
+2. **Database record**: Entry in the SQLite database is deleted
+3. **Embeddings**: Vector embeddings (if any) are removed
+4. **Full-text index**: FTS5 search index entry is cleared
+
+## Use Cases
+
+### Remove outdated information
+
+```bash
+# Find outdated memories
+memory search "old approach" --project
+
+# Delete the obsolete ones
+memory delete c5e7f9a1b3d2
+```
+
+### Clean up test entries
+
+```bash
+memory search "test" --limit 20
+# Delete test memories one by one
+memory delete d6f8g0h2i4j6
+memory delete e7g9h1i3j5k7
+```
+
+### Remove sensitive information
+
+If you accidentally saved sensitive data:
+
+```bash
+memory search "password" --project
+memory delete f8h0i2j4k6l8
+```
+
+## Safety Considerations
+
+<Warning>
+Deletion is permanent. There is no undo or recovery. The memory file and database records are immediately removed.
+</Warning>
+
+### Before deleting:
+
+1. **Verify the ID**: Use `memory search` to confirm you're deleting the right memory
+2. **Review details**: Run `memory details <id>` to see the full content
+3. **Back up if needed**: Copy the file from `~/.memory/vault/` before deleting
+
+### Bulk deletion:
+
+To delete multiple memories, use a script:
+
+```bash
+# List IDs to delete
+IDS="a3f9c8d2e1b4 b4c6d8e0f2a1 c5e7f9a1b3d2"
+
+# Delete each one
+for id in $IDS; do
+  memory delete $id
+done
+```
+
+## Alternative: Archive Instead of Delete
+
+Instead of deleting, consider:
+
+1. **Move to archive project**: Manually move the file to a different project folder
+2. **Tag as archived**: Update the memory with an `archived` tag
+3. **Keep for reference**: Leave it unless it contains sensitive data
+
+## Related Commands
+
+- [`memory search`](/cli/search) - Find memories to delete
+- [`memory details`](/cli/details) - Review before deleting
+- [`memory save`](/cli/save) - Create a new memory
+
+<Tip>
+If you're unsure about deleting, use `memory details <id>` first to review the full content, or manually inspect the file at `~/.memory/vault/project/DATE-ID.md`.
+</Tip>

@@ -1,0 +1,390 @@
+---
+title: 'memory mcp'
+description: 'Start the EchoVault MCP server (stdio transport)'
+---
+
+## Overview
+
+The `memory mcp` command starts the EchoVault Model Context Protocol (MCP) server using stdio transport. This server provides memory operations as MCP tools that agents can call directly.
+
+## Syntax
+
+```bash
+memory mcp
+```
+
+## What is MCP?
+
+The Model Context Protocol (MCP) is a standard for connecting AI agents to external tools and data sources. EchoVault's MCP server exposes memory operations (save, search, context) as MCP tools.
+
+### MCP vs Hooks
+
+- **Hooks**: Run at session start, inject context into prompt
+- **MCP**: Runs continuously, agents call tools on-demand during conversation
+
+## Usage
+
+### Direct execution
+
+```bash
+memory mcp
+```
+
+The server starts and communicates over stdin/stdout using JSON-RPC.
+
+### In agent configuration
+
+Typically, you don't run this command manually. Instead, configure your agent to launch it:
+
+**OpenCode MCP config:**
+```json
+{
+  "mcpServers": {
+    "echovault": {
+      "command": "memory",
+      "args": ["mcp"],
+      "transport": "stdio"
+    }
+  }
+}
+```
+
+## Installation
+
+### Automatic (recommended)
+
+```bash
+memory setup opencode
+```
+
+This automatically configures OpenCode to launch the MCP server.
+
+### Manual
+
+Add to your agent's MCP configuration file:
+
+**Claude Desktop (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):**
+```json
+{
+  "mcpServers": {
+    "echovault": {
+      "command": "memory",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+**OpenCode (`~/.config/opencode/mcp.json`):**
+```json
+{
+  "mcpServers": {
+    "echovault": {
+      "command": "memory",
+      "args": ["mcp"],
+      "transport": "stdio"
+    }
+  }
+}
+```
+
+## Available MCP Tools
+
+When the server is running, agents can call these tools:
+
+### memory_save
+
+Save a new memory.
+
+**Parameters:**
+- `title` (string, required)
+- `what` (string, required)
+- `why` (string, optional)
+- `impact` (string, optional)
+- `tags` (array, optional)
+- `category` (string, optional)
+- `related_files` (array, optional)
+- `details` (string, optional)
+- `source` (string, optional)
+- `project` (string, optional)
+
+### memory_search
+
+Search memories.
+
+**Parameters:**
+- `query` (string, required)
+- `limit` (integer, optional, default: 5)
+- `project` (boolean, optional)
+- `source` (string, optional)
+
+### memory_context
+
+Get memory pointers for context.
+
+**Parameters:**
+- `project` (boolean, optional)
+- `source` (string, optional)
+- `limit` (integer, optional, default: 10)
+- `query` (string, optional)
+- `semantic_mode` (string, optional)
+
+### memory_details
+
+Get full details for a memory.
+
+**Parameters:**
+- `memory_id` (string, required)
+
+### memory_delete
+
+Delete a memory.
+
+**Parameters:**
+- `memory_id` (string, required)
+
+## Examples
+
+### Testing the server
+
+You can test the MCP server manually using stdio:
+
+```bash
+memory mcp
+```
+
+Then send JSON-RPC messages:
+
+```json
+{"jsonrpc":"2.0","method":"tools/list","id":1}
+```
+
+**Response:**
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "tools": [
+      {"name": "memory_save", "description": "Save a memory", ...},
+      {"name": "memory_search", "description": "Search memories", ...},
+      ...
+    ]
+  }
+}
+```
+
+### Agent calling tools
+
+When properly configured, agents can call tools:
+
+**Agent action:**
+```
+User: "Remember that we decided to use JWT tokens"
+Agent: Calling memory_save with:
+  title: "JWT token decision"
+  what: "Using JWT tokens for authentication"
+  category: "decision"
+```
+
+**Server response:**
+```json
+{
+  "id": "a3f9c8d2e1b4",
+  "file_path": "/home/user/.memory/vault/myproject/2026-03-03-a3f9c8d2e1b4.md"
+}
+```
+
+## Debugging
+
+### Check if server is running
+
+In your agent's logs, look for:
+
+```
+Starting MCP server: memory mcp
+EchoVault MCP server started
+```
+
+### Enable debug logging
+
+Set environment variable before starting:
+
+```bash
+MCP_DEBUG=1 memory mcp
+```
+
+### Test connection
+
+Use an MCP inspector tool:
+
+```bash
+npx @modelcontextprotocol/inspector memory mcp
+```
+
+## Troubleshooting
+
+### Server won't start
+
+**Check command path:**
+```bash
+which memory
+# Should output: /usr/local/bin/memory or similar
+```
+
+**Fix:**
+```bash
+# Ensure memory CLI is in PATH
+export PATH="$PATH:/path/to/memory"
+```
+
+### Agent can't connect
+
+**Check agent config:**
+```bash
+cat ~/.config/opencode/mcp.json
+```
+
+**Verify command:**
+```json
+{
+  "command": "memory",  // NOT "echovault" or full path
+  "args": ["mcp"]
+}
+```
+
+### Tools not appearing
+
+**Restart agent:**
+
+After configuring MCP, restart your agent to pick up the new server.
+
+**Check server logs:**
+
+Look for errors in agent's debug output.
+
+## Server Lifecycle
+
+1. **Start**: Agent launches `memory mcp` as subprocess
+2. **Initialize**: Server sends capabilities and tool list
+3. **Running**: Agent calls tools via JSON-RPC over stdio
+4. **Shutdown**: Agent closes stdin, server exits cleanly
+
+## Transport Details
+
+### stdio (standard I/O)
+
+- **Input**: JSON-RPC messages on stdin
+- **Output**: JSON-RPC responses on stdout
+- **Errors**: Logged to stderr (visible in agent logs)
+
+### Message format
+
+**Request:**
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "tools/call",
+  "params": {
+    "name": "memory_search",
+    "arguments": {"query": "authentication", "limit": 5}
+  },
+  "id": 1
+}
+```
+
+**Response:**
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "content": [{"type": "text", "text": "..."}]
+  }
+}
+```
+
+## Use Cases
+
+### OpenCode integration
+
+The primary use case:
+
+```bash
+# Install
+memory setup opencode
+
+# OpenCode automatically starts: memory mcp
+# Agents can now call memory tools during conversations
+```
+
+### Claude Desktop
+
+For Claude Desktop app:
+
+```bash
+# Edit config
+nano "~/Library/Application Support/Claude/claude_desktop_config.json"
+
+# Add echovault server:
+{
+  "mcpServers": {
+    "echovault": {
+      "command": "memory",
+      "args": ["mcp"]
+    }
+  }
+}
+
+# Restart Claude Desktop
+```
+
+### Custom MCP client
+
+Build your own:
+
+```python
+import subprocess
+import json
+
+# Start server
+server = subprocess.Popen(
+    ["memory", "mcp"],
+    stdin=subprocess.PIPE,
+    stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE,
+    text=True
+)
+
+# Call tool
+request = {
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+        "name": "memory_search",
+        "arguments": {"query": "test"}
+    },
+    "id": 1
+}
+server.stdin.write(json.dumps(request) + "\n")
+server.stdin.flush()
+
+# Read response
+response = json.loads(server.stdout.readline())
+print(response)
+```
+
+## Related Commands
+
+- [`memory setup opencode`](/cli/setup#opencode) - Install MCP server for OpenCode
+- [`memory uninstall opencode`](/cli/uninstall#opencode) - Remove MCP server
+- [`memory save`](/cli/save) - CLI equivalent of memory_save tool
+- [`memory search`](/cli/search) - CLI equivalent of memory_search tool
+
+<Tip>
+The MCP server provides the same functionality as CLI commands but optimized for agent integration. Agents can call memory operations on-demand during conversations.
+</Tip>
+
+<Note>
+The server runs as a long-lived process managed by your agent. Don't run `memory mcp` manually unless you're testing or building a custom integration.
+</Note>

@@ -1,0 +1,108 @@
+---
+title: Cursor
+description: Set up EchoVault for Cursor using the MCP config file.
+---
+
+Cursor integrates with EchoVault via MCP. One command installs the MCP server entry into `~/.cursor/mcp.json`, and Cursor automatically uses memory tools during sessions.
+
+## Installation
+
+<Steps>
+  <Step title="Install EchoVault">
+    ```bash
+    pip install git+https://github.com/mraza007/echovault.git
+    memory init
+    ```
+  </Step>
+
+  <Step title="Run setup">
+    ```bash
+    memory setup cursor
+    ```
+
+    This writes the MCP server config to `~/.cursor/mcp.json`.
+  </Step>
+
+  <Step title="Restart Cursor">
+    Restart Cursor to load the new MCP server.
+  </Step>
+</Steps>
+
+## What gets installed
+
+The setup command adds an `mcpServers` entry to `~/.cursor/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "echovault": {
+      "command": "memory",
+      "args": ["mcp"],
+      "type": "stdio"
+    }
+  }
+}
+```
+
+Cursor spawns `memory mcp` at session start and gains access to three tools:
+- `memory_save`
+- `memory_search`
+- `memory_context`
+
+<Note>
+Legacy hook-based setups in `hooks.json` are migrated automatically. The setup command removes old hooks and consolidates everything into `mcp.json`.
+</Note>
+
+## Config file location
+
+Cursor always uses `~/.cursor/mcp.json` for MCP config. There is no project-scoped installation for Cursor.
+
+<Warning>
+The `--project` flag is not supported for Cursor. Use `--config-dir` if your `.cursor` directory is in a non-standard location.
+</Warning>
+
+## Custom config directory
+
+If your `.cursor` directory is in a non-standard location:
+
+```bash
+memory setup cursor --config-dir /path/to/.cursor
+```
+
+The setup command writes to `/path/to/.cursor/mcp.json`.
+
+## Uninstalling
+
+To remove EchoVault from Cursor:
+
+```bash
+memory uninstall cursor
+```
+
+This removes the `echovault` entry from `~/.cursor/mcp.json`.
+
+<Tip>
+Your memory vault at `~/.memory/vault/` is not deleted. Only the MCP config is removed.
+</Tip>
+
+## Usage
+
+Once installed, Cursor automatically:
+- Calls `memory_context --project` at session start to load recent memories
+- Calls `memory_search <query>` when searching for relevant context
+- Calls `memory_save` to persist decisions, bugs, and learnings
+
+You don't need to prompt Cursor to use memory. The MCP tool descriptions instruct it to save and retrieve automatically.
+
+## Migration notes
+
+Older versions of EchoVault used hooks in `~/.cursor/hooks.json`. The setup command now:
+- Removes legacy hooks from `hooks.json`
+- Removes old skill directories
+- Consolidates everything into `mcp.json`
+
+Re-run `memory setup cursor` to migrate automatically.
+
+<Tip>
+Use `memory config` to verify your setup and check the effective memory home path.
+</Tip>

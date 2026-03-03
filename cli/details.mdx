@@ -1,0 +1,141 @@
+---
+title: 'memory details'
+description: 'Fetch full details for a specific memory'
+---
+
+## Overview
+
+The `memory details` command retrieves the complete extended details for a memory, including any additional context, decision rationale, or documentation that was saved with `--details` or `--details-file`.
+
+## Syntax
+
+```bash
+memory details <memory-id>
+```
+
+## Arguments
+
+<ParamField path="memory-id" type="string" required>
+  The memory ID or ID prefix. You can use the full ID or just the first 12 characters shown in search results.
+</ParamField>
+
+## Examples
+
+### View details using ID prefix
+
+```bash
+memory details a3f9c8d2e1b4
+```
+
+**Output:**
+```
+Context:
+We needed to improve user retention. Users reported frustration with frequent
+logouts during their workflow.
+
+Options considered:
+- Option A: Keep 24h tokens, add refresh token flow
+- Option B: Extend token expiry to 7 days
+- Option C: Implement "remember me" checkbox
+
+Decision:
+Went with Option B (7-day tokens) for simplicity. Will monitor security implications.
+
+Tradeoffs:
+- Pro: Better UX, fewer complaints
+- Pro: Simpler than refresh tokens
+- Con: Longer window if token is compromised
+- Con: Can't revoke as easily
+
+Follow-up:
+- Monitor for suspicious activity
+- Consider adding token revocation list if needed
+- Re-evaluate in 3 months based on security metrics
+```
+
+### View details with full ID
+
+```bash
+memory details a3f9c8d2e1b4-7a8b-4c5d-9e0f-1g2h3i4j5k6l
+```
+
+### When memory has no extended details
+
+```bash
+memory details b2e4a6c8d0f1
+```
+
+**Output:**
+```
+No details found for memory b2e4a6c8d0f1
+```
+
+## Finding Memory IDs
+
+You get memory IDs from:
+
+1. **Search results**: Shows 12-char prefix
+   ```bash
+   memory search "authentication"
+   # Look for: Details: available (use `memory details a3f9c8d2e1b4`)
+   ```
+
+2. **Save output**: Shows ID when saving
+   ```bash
+   memory save --title "Test" --what "Example"
+   # Output: Saved: Test (id: a3f9c8d2e1b4)
+   ```
+
+## Use Cases
+
+### Review decision rationale
+
+When you need to understand why a past decision was made:
+
+```bash
+memory search "API versioning"
+memory details c5e7f9a1b3d2
+```
+
+### Share context with team
+
+Export decision details for documentation:
+
+```bash
+memory details a3f9c8d2e1b4 > docs/decisions/jwt-expiry.md
+```
+
+### Retrieve bug fix notes
+
+Get the full context of a past bug fix:
+
+```bash
+memory search "null pointer auth" --project
+memory details d6f8g0h2i4j6
+```
+
+## Output
+
+The command outputs the raw details text exactly as it was saved. This typically includes:
+
+- Extended context and background
+- Structured decision documentation
+- Code examples or configuration samples
+- Links to related resources
+- Follow-up actions or TODOs
+
+The format depends on what was saved with `--details`, `--details-file`, or `--details-template`.
+
+## Related Commands
+
+- [`memory search`](/cli/search) - Find memories to get their IDs
+- [`memory save`](/cli/save) - Save memories with details
+- [`memory delete`](/cli/delete) - Remove a memory
+
+<Tip>
+When saving important decisions, use `memory save --details-template` to create well-structured details that are easy to retrieve and understand later.
+</Tip>
+
+<Note>
+If you only see "No details found", the memory was saved without the `--details` or `--details-file` options. All the basic information is still available in search results.
+</Note>

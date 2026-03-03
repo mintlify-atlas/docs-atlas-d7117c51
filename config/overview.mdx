@@ -1,0 +1,153 @@
+---
+title: Configuration Overview
+description: Learn how to configure EchoVault for embeddings, memory location, and context retrieval
+---
+
+EchoVault uses a YAML configuration file to customize how memories are stored, searched, and retrieved. Configuration is optional — EchoVault works out of the box with keyword search (FTS5).
+
+## Quick Start
+
+Generate a starter configuration file:
+
+```bash
+memory config init
+```
+
+This creates `~/.memory/config.yaml` with sensible defaults. Edit the file to customize your setup.
+
+## Configuration File Location
+
+The configuration file is stored at:
+
+```
+<memory_home>/config.yaml
+```
+
+Where `<memory_home>` is resolved in this order:
+
+1. `MEMORY_HOME` environment variable (highest priority)
+2. Persisted location via `memory config set-home`
+3. `~/.memory/` (default)
+
+## Configuration Structure
+
+The `config.yaml` file has three main sections:
+
+<CodeGroup>
+```yaml Default Configuration
+# EchoVault configuration
+# Docs: https://github.com/mraza007/echovault#configure-embeddings-optional
+
+# Embedding provider for semantic search.
+# Without this, keyword search (FTS5) still works.
+embedding:
+  provider: ollama              # ollama | openai
+  model: nomic-embed-text
+  # base_url: http://localhost:11434   # ollama default; for openai: https://api.openai.com/v1
+  # api_key: sk-...            # required for openai
+
+# How memories are retrieved at session start.
+# "auto" uses vectors when available, falls back to keywords.
+context:
+  semantic: auto                # auto | always | never
+  topup_recent: true            # also include recent memories
+```
+
+```yaml OpenAI Configuration
+embedding:
+  provider: openai
+  model: text-embedding-3-small
+  base_url: https://api.openai.com/v1
+  api_key: sk-proj-...
+
+context:
+  semantic: auto
+  topup_recent: true
+```
+
+```yaml Ollama Configuration (Local)
+embedding:
+  provider: ollama
+  model: nomic-embed-text
+  base_url: http://localhost:11434
+
+context:
+  semantic: always
+  topup_recent: true
+```
+</CodeGroup>
+
+## Configuration Sections
+
+### Embedding
+
+Controls how memories are converted to vectors for semantic search.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `provider` | string | `ollama` | Embedding provider: `ollama` or `openai` |
+| `model` | string | `nomic-embed-text` | Model name for embeddings |
+| `base_url` | string | (varies) | API endpoint URL (optional) |
+| `api_key` | string | `null` | API key for cloud providers (optional) |
+
+<Note>
+Without embeddings configured, EchoVault uses FTS5 (SQLite full-text search) for keyword-based search. This works well for exact matches and simple queries.
+</Note>
+
+### Context
+
+Controls how memories are retrieved at session start.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `semantic` | string | `auto` | When to use semantic search: `auto`, `always`, or `never` |
+| `topup_recent` | boolean | `true` | Include recent memories in context |
+
+**Semantic modes:**
+
+- `auto` — Use vector search when embeddings are available, fall back to FTS5 keywords
+- `always` — Always use vector search (errors if embeddings not configured)
+- `never` — Only use FTS5 keyword search (ignore embeddings)
+
+## View Current Configuration
+
+To see your effective configuration:
+
+```bash
+memory config
+```
+
+Output includes:
+
+- Embedding provider and model
+- Context retrieval settings
+- Memory home location and source (`env`, `config`, or `default`)
+
+<Tip>
+API keys are automatically redacted in `memory config` output for security.
+</Tip>
+
+## Configuration Priority
+
+When multiple configuration sources exist, EchoVault resolves settings in this order:
+
+1. Environment variables (e.g., `MEMORY_HOME`)
+2. Configuration file (`config.yaml`)
+3. Built-in defaults
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Configure Embeddings" icon="vector-square" href="/config/embeddings">
+    Set up Ollama, OpenAI, or vLLM for semantic search
+  </Card>
+  <Card title="Memory Location" icon="folder" href="/config/memory-location">
+    Change where memories are stored
+  </Card>
+  <Card title="Redaction Rules" icon="shield" href="/config/memoryignore">
+    Add custom patterns to redact sensitive data
+  </Card>
+  <Card title="Reindex Memories" icon="arrows-rotate" href="/cli/reindex">
+    Rebuild vectors after changing providers
+  </Card>
+</CardGroup>

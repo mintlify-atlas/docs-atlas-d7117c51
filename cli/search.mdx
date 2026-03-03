@@ -1,0 +1,147 @@
+---
+title: 'memory search'
+description: 'Search memories using hybrid FTS5 + semantic search'
+---
+
+## Overview
+
+The `memory search` command finds memories using a hybrid approach: full-text search (FTS5) combined with semantic/vector search when embeddings are available.
+
+## Syntax
+
+```bash
+memory search <query> [OPTIONS]
+```
+
+## Arguments
+
+<ParamField path="query" type="string" required>
+  Search query. Can be keywords, phrases, or natural language questions.
+</ParamField>
+
+## Options
+
+<ParamField path="--limit" type="integer" default="5">
+  Maximum number of results to return.
+</ParamField>
+
+<ParamField path="--project" type="flag">
+  Filter results to the current project only (uses current directory name).
+</ParamField>
+
+<ParamField path="--source" type="string">
+  Filter by source (e.g., `cursor`, `claude`, `codex`).
+</ParamField>
+
+## Examples
+
+### Basic search
+
+```bash
+memory search "authentication"
+```
+
+**Output:**
+```
+ Results (3 found) 
+
+ [1] JWT expiry set to 7 days (score: 0.89)
+     decision | 2026-03-01 | myproject
+     What: Changed token expiration from 24h to 7d for better UX
+     Why: Users were complaining about frequent re-logins
+     Impact: Reduced support tickets by 40%
+
+ [2] OAuth2 flow implemented (score: 0.76)
+     pattern | 2026-02-28 | myproject
+     What: Added OAuth2 authorization code flow with PKCE
+     Details: available (use `memory details a8c3f9d2e1b4`)
+
+ [3] Fixed auth middleware bug (score: 0.64)
+     bug | 2026-02-25 | myproject | cursor
+     What: Added null check before accessing user.role
+```
+
+### Search in current project only
+
+```bash
+memory search "database" --project
+```
+
+### Search with more results
+
+```bash
+memory search "performance optimization" --limit 10
+```
+
+### Search by source
+
+```bash
+memory search "refactoring" --source claude
+```
+
+### Natural language query
+
+```bash
+memory search "why did we choose postgres over mysql"
+```
+
+### Combined filters
+
+```bash
+memory search "API design" --project --limit 3
+```
+
+## How Search Works
+
+### Hybrid Approach
+
+EchoVault uses a hybrid search strategy:
+
+1. **FTS5 (Full-Text Search)**: Always active, searches keywords in title, what, why, impact, and tags
+2. **Semantic Search**: When embeddings are configured, also searches by meaning/similarity
+3. **Ranking**: Results are scored and ranked by relevance
+
+### Score Interpretation
+
+- **0.90-1.00**: Excellent match
+- **0.70-0.89**: Good match
+- **0.50-0.69**: Moderate match
+- **Below 0.50**: Weak match
+
+## Output Format
+
+Each result shows:
+
+- **Rank**: Position in results `[1]`, `[2]`, etc.
+- **Title**: Memory title
+- **Score**: Relevance score (0.00-1.00)
+- **Metadata**: Category, date (YYYY-MM-DD), project, and source (if set)
+- **What**: The main description
+- **Why**: Reasoning (if present)
+- **Impact**: Consequences (if present)
+- **Details indicator**: Link to use `memory details <id>` for extended info
+
+## When No Results Found
+
+```bash
+memory search "nonexistent topic"
+```
+
+**Output:**
+```
+No results found.
+```
+
+<Tip>
+Use natural language queries like "why did we..." or "how do we handle..." when semantic search is enabled. The vector embeddings can understand meaning beyond exact keywords.
+</Tip>
+
+## Related Commands
+
+- [`memory details`](/cli/details) - View full details of a search result
+- [`memory context`](/cli/context) - Get memory pointers for agent context
+- [`memory save`](/cli/save) - Save a new memory
+
+<Note>
+Semantic search requires an embedding provider configured in `config.yaml`. Without it, only keyword-based FTS5 search is used (which still works well).
+</Note>

@@ -1,0 +1,282 @@
+---
+title: Memory Location
+description: Configure where EchoVault stores memories, indexes, and configuration files
+---
+
+By default, EchoVault stores all data in `~/.memory/`. You can change this location to organize memories by project, team, or storage volume.
+
+## Default Location
+
+EchoVault creates the following structure:
+
+```
+~/.memory/
+├── vault/                    # Markdown memory files
+│   └── project-name/
+│       └── 2026-02-01-session.md
+├── index.db                  # SQLite database (FTS5 + vectors)
+├── config.yaml               # Configuration file
+└── .memoryignore             # Custom redaction rules (optional)
+```
+
+## Resolution Order
+
+EchoVault resolves the memory home directory in this order:
+
+1. **`MEMORY_HOME` environment variable** (highest priority, per-shell/per-process)
+2. **Persisted location** (set via `memory config set-home`)
+3. **`~/.memory/`** (default)
+
+## Method 1: Environment Variable
+
+Set `MEMORY_HOME` to override the location temporarily:
+
+```bash
+export MEMORY_HOME=/path/to/memory
+memory init
+memory config
+```
+
+This takes precedence over all other methods.
+
+<Tabs>
+  <Tab title="Bash/Zsh">
+    ```bash
+    # Temporary (current shell only)
+    export MEMORY_HOME=/path/to/memory
+
+    # Persistent (add to ~/.bashrc or ~/.zshrc)
+    echo 'export MEMORY_HOME=/path/to/memory' >> ~/.bashrc
+    source ~/.bashrc
+    ```
+  </Tab>
+  <Tab title="Fish">
+    ```bash
+    # Temporary
+    set -x MEMORY_HOME /path/to/memory
+
+    # Persistent
+    set -Ux MEMORY_HOME /path/to/memory
+    ```
+  </Tab>
+  <Tab title="Windows (PowerShell)">
+    ```powershell
+    # Temporary
+    $env:MEMORY_HOME = "C:\path\to\memory"
+
+    # Persistent (user level)
+    [System.Environment]::SetEnvironmentVariable('MEMORY_HOME', 'C:\path\to\memory', 'User')
+    ```
+  </Tab>
+</Tabs>
+
+## Method 2: Persistent Configuration
+
+Use `memory config set-home` to persist a default location. This is used when `MEMORY_HOME` is not set.
+
+```bash
+memory config set-home /path/to/memory
+```
+
+### Set Persistent Home
+
+```bash
+memory config set-home /data/echovault
+```
+
+Output:
+
+```
+Persisted memory home: /data/echovault
+Override anytime with MEMORY_HOME.
+```
+
+This:
+
+1. Creates the directory if it doesn't exist
+2. Creates `vault/` subdirectory
+3. Writes the path to `~/.config/echovault/config.yaml`
+
+### Clear Persistent Home
+
+Remove the persisted location and revert to default:
+
+```bash
+memory config clear-home
+```
+
+### View Current Location
+
+See the effective memory home and how it was resolved:
+
+```bash
+memory config
+```
+
+Output:
+
+```yaml
+embedding:
+  provider: ollama
+  model: nomic-embed-text
+  base_url: null
+  api_key: null
+context:
+  semantic: auto
+  topup_recent: true
+memory_home: /data/echovault
+memory_home_source: config
+```
+
+**`memory_home_source` values:**
+
+- `env` — Set via `MEMORY_HOME` environment variable
+- `config` — Set via `memory config set-home`
+- `default` — Using default `~/.memory/`
+
+## Use Cases
+
+### Per-Project Memories
+
+Isolate memories for different projects:
+
+```bash
+cd ~/projects/project-a
+export MEMORY_HOME=$PWD/.memory
+memory init
+
+cd ~/projects/project-b
+export MEMORY_HOME=$PWD/.memory
+memory init
+```
+
+Each project has its own vault and index.
+
+### Shared Team Memories
+
+Store memories on a shared network drive:
+
+```bash
+memory config set-home /mnt/team-drive/echovault
+```
+
+All team members using this path will share the same memory vault.
+
+<Warning>
+Multiple agents writing to the same memory home simultaneously may cause database locking issues. Use per-user or per-session memory homes for concurrent access.
+</Warning>
+
+### External Storage
+
+Use external storage for large memory vaults:
+
+```bash
+# Mount external drive
+sudo mount /dev/sdb1 /mnt/external
+
+# Set memory home
+memory config set-home /mnt/external/echovault
+memory init
+```
+
+## Global Configuration File
+
+The persisted memory home is stored in:
+
+```
+~/.config/echovault/config.yaml
+```
+
+This file only contains the `memory_home` field:
+
+```yaml
+memory_home: /path/to/memory
+```
+
+Do not confuse this with `<memory_home>/config.yaml`, which contains embedding and context configuration.
+
+## Migration
+
+Move an existing memory vault to a new location:
+
+```bash
+# Copy vault to new location
+cp -r ~/.memory /new/location/
+
+# Update memory home
+memory config set-home /new/location
+
+# Verify
+memory config
+```
+
+<Tip>
+You can also symlink `~/.memory` to another location:
+
+```bash
+mv ~/.memory /data/echovault
+ln -s /data/echovault ~/.memory
+```
+</Tip>
+
+## Troubleshooting
+
+### Memory Home Not Found
+
+**Error**: `No such file or directory: /path/to/memory/vault`
+
+**Solution**:
+
+```bash
+memory init
+```
+
+This creates the required directory structure.
+
+### Permission Denied
+
+**Error**: `Permission denied: /path/to/memory`
+
+**Solution**:
+
+1. Check directory permissions: `ls -ld /path/to/memory`
+2. Ensure you have write access
+3. Use a directory you own, or adjust permissions:
+
+```bash
+sudo chown -R $USER:$USER /path/to/memory
+chmod -R u+w /path/to/memory
+```
+
+### Wrong Memory Home Used
+
+**Problem**: Memories not appearing, wrong location used
+
+**Solution**:
+
+Check resolution order:
+
+```bash
+# Check environment variable
+echo $MEMORY_HOME
+
+# Check persisted config
+memory config
+
+# Unset environment variable if needed
+unset MEMORY_HOME
+
+# Clear persisted config if needed
+memory config clear-home
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Initialize Vault" icon="folder-plus" href="/cli/init">
+    Create vault structure at memory home
+  </Card>
+  <Card title="Configure Embeddings" icon="vector-square" href="/config/embeddings">
+    Set up semantic search providers
+  </Card>
+</CardGroup>

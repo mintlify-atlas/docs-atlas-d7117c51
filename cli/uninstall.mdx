@@ -1,0 +1,430 @@
+---
+title: 'memory uninstall'
+description: 'Remove EchoVault hooks from coding agents'
+---
+
+## Overview
+
+The `memory uninstall` command group removes EchoVault integration hooks from coding agents. This disables automatic memory context injection.
+
+## Syntax
+
+```bash
+memory uninstall <agent> [OPTIONS]
+```
+
+## Supported Agents
+
+- `claude-code` - Claude Code (Anthropic)
+- `cursor` - Cursor AI editor
+- `codex` - Codex AI
+- `opencode` - OpenCode (MCP server)
+
+## Subcommands
+
+### claude-code
+
+Remove hooks from Claude Code settings.
+
+```bash
+memory uninstall claude-code [OPTIONS]
+```
+
+#### Options
+
+<ParamField path="--config-dir" type="string">
+  Path to `.claude` directory. Default: `~/.claude` (global) or `./.claude` (project).
+</ParamField>
+
+<ParamField path="--project" type="flag">
+  Uninstall from current project instead of globally (uses `./.claude`).
+</ParamField>
+
+#### Examples
+
+**Global uninstall:**
+
+```bash
+memory uninstall claude-code
+```
+
+**Output:**
+```
+EchoVault hooks removed from /home/user/.claude
+```
+
+**Project-specific uninstall:**
+
+```bash
+memory uninstall claude-code --project
+```
+
+**Output:**
+```
+EchoVault hooks removed from /home/user/myproject/.claude
+```
+
+**Custom directory:**
+
+```bash
+memory uninstall claude-code --config-dir /path/to/.claude
+```
+
+### cursor
+
+Remove hooks from Cursor `hooks.json`.
+
+```bash
+memory uninstall cursor [OPTIONS]
+```
+
+#### Options
+
+<ParamField path="--config-dir" type="string">
+  Path to `.cursor` directory. Default: `~/.cursor` (global) or `./.cursor` (project).
+</ParamField>
+
+<ParamField path="--project" type="flag">
+  Uninstall from current project instead of globally (uses `./.cursor`).
+</ParamField>
+
+#### Examples
+
+**Global uninstall:**
+
+```bash
+memory uninstall cursor
+```
+
+**Output:**
+```
+EchoVault hooks removed from /home/user/.cursor/hooks.json
+```
+
+**Project-specific uninstall:**
+
+```bash
+memory uninstall cursor --project
+```
+
+**Custom directory:**
+
+```bash
+memory uninstall cursor --config-dir /path/to/.cursor
+```
+
+### codex
+
+Remove EchoVault from Codex `AGENTS.md` and `config.toml`.
+
+```bash
+memory uninstall codex [OPTIONS]
+```
+
+#### Options
+
+<ParamField path="--config-dir" type="string">
+  Path to `.codex` directory. Default: `~/.codex` (global) or `./.codex` (project).
+</ParamField>
+
+<ParamField path="--project" type="flag">
+  Uninstall from current project instead of globally (uses `./.codex`).
+</ParamField>
+
+#### Examples
+
+**Global uninstall:**
+
+```bash
+memory uninstall codex
+```
+
+**Output:**
+```
+EchoVault integration removed from /home/user/.codex/AGENTS.md and config.toml
+```
+
+**Project-specific uninstall:**
+
+```bash
+memory uninstall codex --project
+```
+
+**Custom directory:**
+
+```bash
+memory uninstall codex --config-dir /path/to/.codex
+```
+
+### opencode
+
+Remove EchoVault MCP server from OpenCode.
+
+```bash
+memory uninstall opencode [OPTIONS]
+```
+
+#### Options
+
+<ParamField path="--project" type="flag">
+  Uninstall from current project instead of globally.
+</ParamField>
+
+#### Examples
+
+**Global uninstall:**
+
+```bash
+memory uninstall opencode
+```
+
+**Output:**
+```
+EchoVault MCP server removed from OpenCode
+```
+
+**Project-specific uninstall:**
+
+```bash
+memory uninstall opencode --project
+```
+
+## What Gets Removed
+
+### Claude Code
+
+Removes memory context hook from `.claude/settings.json`:
+
+**Before:**
+```json
+{
+  "hooks": {
+    "session_start": "memory context --project --limit 10"
+  }
+}
+```
+
+**After:**
+```json
+{
+  "hooks": {}
+}
+```
+
+### Cursor
+
+Removes memory hook from `.cursor/hooks.json`:
+
+**Before:**
+```json
+{
+  "hooks": [
+    {
+      "name": "echovault-context",
+      "command": "memory context --project --limit 10",
+      "when": "session_start"
+    }
+  ]
+}
+```
+
+**After:**
+```json
+{
+  "hooks": []
+}
+```
+
+### Codex
+
+Removes EchoVault section from `.codex/AGENTS.md` and unregisters the hook from `config.toml`.
+
+### OpenCode
+
+Unregisters the EchoVault MCP server from OpenCode's MCP configuration.
+
+## Effects of Uninstalling
+
+After uninstalling:
+
+1. **No automatic context**: Agents won't receive memory context at session start
+2. **Manual access still works**: You can still run `memory` commands manually
+3. **Memories preserved**: All saved memories remain in the vault
+4. **Config preserved**: `config.yaml` and database are unchanged
+
+## Verification
+
+### Check removal
+
+**Claude Code:**
+```bash
+cat ~/.claude/settings.json
+```
+
+**Cursor:**
+```bash
+cat ~/.cursor/hooks.json
+```
+
+**Codex:**
+```bash
+cat ~/.codex/AGENTS.md | grep -A 10 "EchoVault"
+# Should return nothing
+```
+
+### Confirm hooks don't run
+
+Restart your agent and verify it doesn't load memory context automatically.
+
+## Use Cases
+
+### Temporarily disable integration
+
+```bash
+# Disable
+memory uninstall cursor
+
+# Work without memory context
+# ...
+
+# Re-enable later
+memory setup cursor
+```
+
+### Remove from specific project
+
+```bash
+cd myproject
+
+# Remove project-specific installation
+memory uninstall cursor --project
+
+# Global installation (if any) still works in other projects
+```
+
+### Clean uninstall
+
+```bash
+# Remove all agent integrations
+memory uninstall cursor
+memory uninstall claude-code
+memory uninstall codex
+memory uninstall opencode
+
+# Optionally, remove vault and config
+rm -rf ~/.memory
+```
+
+### Switch to different agent
+
+```bash
+# Remove old agent
+memory uninstall cursor
+
+# Install new agent
+memory setup claude-code
+```
+
+## Troubleshooting
+
+### Already uninstalled
+
+```bash
+memory uninstall cursor
+```
+
+**Output:**
+```
+EchoVault hooks not found in /home/user/.cursor/hooks.json
+```
+
+This is expected if hooks were never installed or already removed.
+
+### Config file missing
+
+```bash
+memory uninstall cursor
+```
+
+**Output:**
+```
+No configuration found at /home/user/.cursor
+```
+
+The agent config directory doesn't exist, so no removal is needed.
+
+### Manual removal
+
+If the uninstall command fails, manually edit the config:
+
+**Cursor:**
+```bash
+nano ~/.cursor/hooks.json
+# Remove the echovault-context entry
+```
+
+**Claude Code:**
+```bash
+nano ~/.claude/settings.json
+# Remove the session_start hook
+```
+
+## Uninstall Multiple Agents
+
+```bash
+# Remove from all agents
+memory uninstall cursor
+memory uninstall claude-code
+memory uninstall codex
+memory uninstall opencode
+```
+
+## Complete Removal
+
+To completely remove EchoVault:
+
+```bash
+# 1. Uninstall from all agents
+memory uninstall cursor
+memory uninstall claude-code
+memory uninstall codex
+memory uninstall opencode
+
+# 2. Remove the CLI (depends on installation method)
+pip uninstall echovault
+# or
+uvx uninstall echovault
+
+# 3. Optionally remove vault and config
+rm -rf ~/.memory
+rm -rf ~/.config/memory
+```
+
+## Preserving Memories
+
+Uninstalling hooks does NOT delete your memories. To preserve them:
+
+```bash
+# Before uninstalling
+tar -czf memories-backup.tar.gz ~/.memory
+
+# Uninstall hooks
+memory uninstall cursor
+
+# Memories are still at ~/.memory
+ls ~/.memory/vault
+```
+
+## Related Commands
+
+- [`memory setup`](/cli/setup) - Install hooks
+- [`memory context`](/cli/context) - Manually get context (works after uninstall)
+- [`memory search`](/cli/search) - Search memories (works after uninstall)
+
+<Tip>
+Uninstalling hooks doesn't affect your memories or the CLI. You can still use all `memory` commands manually.
+</Tip>
+
+<Note>
+After uninstalling, restart your coding agent for changes to take effect.
+</Note>

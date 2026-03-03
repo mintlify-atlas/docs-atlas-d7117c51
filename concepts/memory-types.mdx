@@ -1,0 +1,222 @@
+---
+title: 'Memory Categories'
+description: 'Five types of memories for different kinds of knowledge'
+---
+
+## Overview
+
+EchoVault organizes memories into five distinct categories, each designed to capture a specific type of knowledge that agents need to retain across sessions.
+
+<Info>
+From `~/workspace/source/src/memory/models.py:9`, the valid categories are:
+
+```python
+VALID_CATEGORIES = ("decision", "pattern", "bug", "context", "learning")
+```
+</Info>
+
+## Categories
+
+<AccordionGroup>
+  <Accordion title="Decision" icon="gavel">
+    **Use for**: Architectural choices, technology selections, design decisions
+
+    Decisions capture the "why" behind choices made in your codebase. These memories help agents understand past reasoning and avoid revisiting settled questions.
+
+    ### What to capture
+    - The decision that was made
+    - Options that were considered
+    - Reasoning and tradeoffs
+    - Expected impact
+    - Follow-up actions needed
+
+    ### Example
+    ```bash
+    memory save \
+      --title "Switched from REST to GraphQL" \
+      --what "Migrated user API from REST endpoints to GraphQL" \
+      --why "Needed flexible querying for mobile clients" \
+      --impact "Frontend can request exactly what it needs" \
+      --category "decision" \
+      --tags "api,graphql,architecture"
+    ```
+
+    <Tip>
+    From `~/workspace/source/src/memory/core.py:154`, decision memories should include thorough details:
+
+    > "'decision' memories should include details. Capture context, options considered, decision, tradeoffs, and follow-up."
+    </Tip>
+  </Accordion>
+
+  <Accordion title="Pattern" icon="repeat">
+    **Use for**: Recurring code patterns, conventions, idioms, best practices
+
+    Patterns capture reusable knowledge about how things are done in your codebase. These memories help agents maintain consistency across the project.
+
+    ### What to capture
+    - The pattern or convention
+    - Where it's used
+    - Why this approach is preferred
+    - Examples or template code
+
+    ### Example
+    ```bash
+    memory save \
+      --title "Error handling pattern for API calls" \
+      --what "Use Result type with ok/err variants" \
+      --why "Avoids throwing exceptions in hot paths" \
+      --impact "All API modules use consistent error handling" \
+      --category "pattern" \
+      --tags "error-handling,api,conventions"
+    ```
+  </Accordion>
+
+  <Accordion title="Bug" icon="bug">
+    **Use for**: Bug fixes, root causes, debugging insights
+
+    Bug memories capture both the fix and the underlying cause. These memories prevent regressions and help agents understand subtle issues.
+
+    ### What to capture
+    - What the bug was
+    - Root cause analysis
+    - How it was fixed
+    - How to prevent similar issues
+    - Related files affected
+
+    ### Example
+    ```bash
+    memory save \
+      --title "Race condition in auth token refresh" \
+      --what "Fixed concurrent token refresh causing 401s" \
+      --why "Multiple requests triggered parallel refreshes" \
+      --impact "Added mutex lock around token refresh logic" \
+      --category "bug" \
+      --tags "auth,concurrency,bug-fix" \
+      --related-files "src/auth/token.ts,src/middleware/auth.ts"
+    ```
+
+    <Tip>
+    From `~/workspace/source/src/memory/core.py:154`, bug memories also benefit from detailed context:
+
+    > "'bug' memories should include details. Capture context, options considered, decision, tradeoffs, and follow-up."
+    </Tip>
+  </Accordion>
+
+  <Accordion title="Context" icon="map">
+    **Use for**: Project setup, infrastructure, deployment info, environment details
+
+    Context memories capture environmental and infrastructure knowledge that agents need to work effectively in your project.
+
+    ### What to capture
+    - Project structure and organization
+    - Development environment setup
+    - Deployment procedures
+    - Infrastructure details
+    - External dependencies
+
+    ### Example
+    ```bash
+    memory save \
+      --title "Database migration workflow" \
+      --what "Migrations run via npm run migrate before deploy" \
+      --why "Ensures schema updates happen before code deploy" \
+      --impact "All deploys must run migrations first" \
+      --category "context" \
+      --tags "database,deployment,workflow"
+    ```
+  </Accordion>
+
+  <Accordion title="Learning" icon="lightbulb">
+    **Use for**: Discoveries, non-obvious insights, gotchas, lessons learned
+
+    Learning memories capture knowledge that isn't obvious from reading the code. These memories save agents from rediscovering the same insights.
+
+    ### What to capture
+    - What was learned
+    - Why it's not obvious
+    - When to apply this knowledge
+    - Related context
+
+    ### Example
+    ```bash
+    memory save \
+      --title "SQLite FTS5 requires explicit tokenizer" \
+      --what "Must specify tokenizer='porter' for stemming" \
+      --why "Default tokenizer doesn't do stemming" \
+      --impact "Updated all FTS5 table creation to include tokenizer" \
+      --category "learning" \
+      --tags "sqlite,fts5,gotcha"
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Category Headings in Markdown
+
+When memories are written to session files, each category gets its own section:
+
+<CodeGroup>
+```python models.py:11-17
+CATEGORY_HEADINGS = {
+    "decision": "Decisions",
+    "pattern": "Patterns",
+    "bug": "Bugs Fixed",
+    "context": "Context",
+    "learning": "Learnings",
+}
+```
+</CodeGroup>
+
+This creates organized, scannable session files:
+
+```markdown
+# Session: 2026-03-03
+
+## Decisions
+
+### Switched to JWT auth
+...
+
+## Bugs Fixed
+
+### Race condition in token refresh
+...
+
+## Learnings
+
+### SQLite FTS5 tokenizer behavior
+...
+```
+
+## Best Practices
+
+<Card title="Choose the Right Category" icon="compass">
+  - **Decision**: For choices between alternatives
+  - **Pattern**: For how to do something consistently
+  - **Bug**: For what went wrong and how it was fixed
+  - **Context**: For environmental/infrastructure knowledge
+  - **Learning**: For non-obvious insights and gotchas
+</Card>
+
+<Card title="Quality Over Speed" icon="gauge-high">
+  From `~/workspace/source/src/memory/core.py:147-187`, EchoVault provides quality warnings:
+  
+  - Warns if decision or bug memories lack details
+  - Suggests minimum 120 characters for meaningful context
+  - Checks for recommended sections: context, options considered, decision, tradeoffs, follow-up
+</Card>
+
+## Filtering by Category
+
+When searching memories, you can filter by category to narrow results:
+
+```bash
+# Search only decision memories
+memory search "authentication" --category decision
+
+# Context retrieval filtered by category
+memory context --project --category pattern
+```
+
+<Note>
+Categories are optional. If not specified, the memory is stored without a category and will still appear in searches.
+</Note>

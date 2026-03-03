@@ -1,0 +1,261 @@
+---
+title: 'memory context'
+description: 'Output memory pointers for agent context injection'
+---
+
+## Overview
+
+The `memory context` command retrieves a summary of available memories formatted for injection into agent prompts. This is typically used by hooks and integrations to provide agents with relevant context at session start.
+
+## Syntax
+
+```bash
+memory context [OPTIONS]
+```
+
+## Options
+
+<ParamField path="--project" type="flag">
+  Filter to current project only (uses current directory name).
+</ParamField>
+
+<ParamField path="--source" type="string">
+  Filter by source (e.g., `cursor`, `claude`, `codex`).
+</ParamField>
+
+<ParamField path="--limit" type="integer" default="10">
+  Maximum number of memory pointers to return.
+</ParamField>
+
+<ParamField path="--query" type="string">
+  Semantic search query for filtering memories by relevance.
+</ParamField>
+
+<ParamField path="--semantic" type="flag">
+  Force semantic search (requires embeddings). Overrides config.
+</ParamField>
+
+<ParamField path="--fts-only" type="flag">
+  Disable embeddings and use FTS-only search.
+</ParamField>
+
+<ParamField path="--show-config" type="flag">
+  Show effective configuration and exit (doesn't retrieve memories).
+</ParamField>
+
+<ParamField path="--format" type="choice" default="hook">
+  Output format: `hook` (default) or `agents-md`.
+</ParamField>
+
+## Examples
+
+### Get context for current project
+
+```bash
+memory context --project
+```
+
+**Output:**
+```
+Available memories (12 total, showing 10):
+- [Mar 03] JWT expiry set to 7 days [decision] [auth,security]
+- [Mar 02] Connection pooling implemented [decision] [database,performance]
+- [Mar 01] Rate limiting added [pattern] [api,security]
+- [Feb 28] OAuth2 flow complete [pattern] [auth]
+- [Feb 27] Fixed null pointer in auth middleware [bug] [auth]
+- [Feb 26] API versioning strategy [decision] [api]
+- [Feb 25] Error handling pattern [pattern]
+- [Feb 24] Database migration approach [decision] [database]
+- [Feb 23] Code review guidelines [context]
+- [Feb 22] Testing strategy defined [decision] [testing]
+Use `memory search <query>` for full details on any memory.
+```
+
+### Get all memories (no filter)
+
+```bash
+memory context --limit 20
+```
+
+### Query-based context
+
+```bash
+memory context --query "authentication and security" --project
+```
+
+### Force semantic search
+
+```bash
+memory context --semantic --project --limit 5
+```
+
+### Use keyword-only search
+
+```bash
+memory context --fts-only --project
+```
+
+### Agents markdown format
+
+```bash
+memory context --project --format agents-md
+```
+
+**Output:**
+```
+## Memory Context
+
+Available memories (12 total, showing 10):
+- [Mar 03] JWT expiry set to 7 days [decision] [auth,security]
+- [Mar 02] Connection pooling implemented [decision] [database,performance]
+...
+
+Use `memory search <query>` for full details on any memory.
+```
+
+### Show configuration
+
+```bash
+memory context --show-config
+```
+
+**Output:**
+```yaml
+embedding:
+  provider: ollama
+  model: nomic-embed-text
+  base_url: http://localhost:11434
+  api_key: <redacted>
+context:
+  semantic: auto
+  topup_recent: true
+memory_home: /home/user/.memory
+memory_home_source: persisted
+```
+
+## Output Format
+
+### Default (hook format)
+
+Optimized for agent prompt injection:
+
+- Date formatted as "Mon DD" (e.g., "Mar 03")
+- Title with category and tags in brackets
+- Footer with search instruction
+
+### Agents markdown format
+
+Similar to hook format but wrapped in a markdown section:
+
+- Starts with `## Memory Context` header
+- Same list format
+- Ends with blank line
+
+## How Context Retrieval Works
+
+### Retrieval Strategy
+
+The `context` command follows your `config.yaml` settings:
+
+```yaml
+context:
+  semantic: auto      # auto | always | never
+  topup_recent: true  # also include recent memories
+```
+
+- **semantic: auto**: Use vectors if available, fall back to keywords
+- **semantic: always**: Require embeddings (error if not configured)
+- **semantic: never**: Always use FTS5 keyword search
+- **topup_recent: true**: Include recent memories even if not highest-ranked
+
+### With `--query`
+
+When you provide a query:
+
+1. Searches memories using hybrid FTS5 + semantic
+2. Ranks by relevance to the query
+3. Returns top N based on `--limit`
+
+### Without `--query`
+
+When no query is provided:
+
+1. Returns recent memories (ordered by creation date)
+2. Optionally filtered by project/source
+
+## Integration Use Cases
+
+### In agent hooks
+
+Typically used in `.cursor/hooks.json`, `.claude/settings.json`, or similar:
+
+```json
+{
+  "hooks": [
+    {
+      "name": "memory-context",
+      "command": "memory context --project --limit 10",
+      "when": "session_start"
+    }
+  ]
+}
+```
+
+### In shell scripts
+
+Capture context for custom workflows:
+
+```bash
+#!/bin/bash
+context=$(memory context --project --format agents-md)
+echo "$context" > /tmp/session-context.md
+```
+
+### With MCP servers
+
+The EchoVault MCP server uses this internally:
+
+```bash
+memory mcp
+# Uses context retrieval for agent memory injection
+```
+
+## Filtering Logic
+
+### By project
+
+```bash
+memory context --project
+```
+
+Filters to memories where `project` matches the current directory name.
+
+### By source
+
+```bash
+memory context --source cursor
+```
+
+Filters to memories saved by a specific agent/source.
+
+### Combined
+
+```bash
+memory context --project --source claude --limit 5
+```
+
+Both filters applied (AND logic).
+
+## Related Commands
+
+- [`memory search`](/cli/search) - Search for specific memories
+- [`memory save`](/cli/save) - Add memories to context pool
+- [`memory config`](/cli/config) - View context retrieval settings
+
+<Tip>
+Use `--query` when you want context relevant to a specific topic, like starting a new feature: `memory context --query "payment API" --project`
+</Tip>
+
+<Note>
+The `--semantic` and `--fts-only` flags override your config.yaml settings for testing. Most integrations should rely on the config file.
+</Note>

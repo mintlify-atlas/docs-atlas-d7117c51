@@ -1,0 +1,275 @@
+---
+title: Configuring Embeddings
+description: Set up semantic search with Ollama, OpenAI, or vLLM embedding providers
+---
+
+Embeddings enable semantic search in EchoVault. Without embeddings, you still get fast keyword search via FTS5.
+
+## Why Embeddings?
+
+Embeddings convert memories into vectors, allowing semantic search:
+
+- **Keyword search**: "JWT authentication" only matches exact keywords
+- **Semantic search**: "JWT authentication" also finds "Bearer token auth", "stateless API auth", etc.
+
+EchoVault uses hybrid search — combining FTS5 keywords with semantic vectors for best results.
+
+## Supported Providers
+
+<CardGroup cols={3}>
+  <Card title="Ollama" icon="server">
+    Local, free, private
+  </Card>
+  <Card title="OpenAI" icon="cloud">
+    Cloud API, paid
+  </Card>
+  <Card title="vLLM" icon="network-wired">
+    Self-hosted, OpenAI-compatible
+  </Card>
+</CardGroup>
+
+## Ollama (Local)
+
+Run embeddings locally with Ollama. No API keys, no cloud, no cost.
+
+### Setup
+
+1. Install Ollama: [https://ollama.ai/download](https://ollama.ai/download)
+2. Pull an embedding model:
+
+```bash
+ollama pull nomic-embed-text
+```
+
+3. Configure EchoVault:
+
+```bash
+memory config init
+```
+
+4. Edit `~/.memory/config.yaml`:
+
+```yaml
+embedding:
+  provider: ollama
+  model: nomic-embed-text
+  base_url: http://localhost:11434
+```
+
+### Configuration Options
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `provider` | string | Yes | `ollama` | Must be `ollama` |
+| `model` | string | Yes | `nomic-embed-text` | Ollama model name |
+| `base_url` | string | No | `http://localhost:11434` | Ollama API endpoint |
+
+<Note>
+If Ollama is running on a different host or port, set `base_url` accordingly.
+</Note>
+
+### Recommended Models
+
+| Model | Size | Dimensions | Use Case |
+|-------|------|------------|----------|
+| `nomic-embed-text` | 274 MB | 768 | General-purpose, fast |
+| `mxbai-embed-large` | 669 MB | 1024 | High accuracy |
+| `all-minilm` | 46 MB | 384 | Lightweight, quick |
+
+### Example: Custom Ollama Host
+
+```yaml
+embedding:
+  provider: ollama
+  model: nomic-embed-text
+  base_url: http://ollama.internal:11434
+```
+
+## OpenAI (Cloud)
+
+Use OpenAI's cloud API for embeddings. Requires an API key.
+
+### Setup
+
+1. Get an API key: [https://platform.openai.com/api-keys](https://platform.openai.com/api-keys)
+2. Configure EchoVault:
+
+```bash
+memory config init
+```
+
+3. Edit `~/.memory/config.yaml`:
+
+```yaml
+embedding:
+  provider: openai
+  model: text-embedding-3-small
+  base_url: https://api.openai.com/v1
+  api_key: sk-proj-...
+```
+
+### Configuration Options
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `provider` | string | Yes | — | Must be `openai` |
+| `model` | string | Yes | `text-embedding-3-small` | OpenAI model name |
+| `base_url` | string | No | `https://api.openai.com/v1` | API endpoint |
+| `api_key` | string | Yes | — | OpenAI API key |
+
+<Warning>
+OpenAI API calls send memory content to OpenAI servers. If privacy is critical, use Ollama or vLLM instead.
+</Warning>
+
+### Recommended Models
+
+| Model | Dimensions | Cost (per 1M tokens) |
+|-------|------------|----------------------|
+| `text-embedding-3-small` | 1536 | $0.02 |
+| `text-embedding-3-large` | 3072 | $0.13 |
+| `text-embedding-ada-002` | 1536 | $0.10 |
+
+<Tip>
+`text-embedding-3-small` offers the best balance of performance and cost.
+</Tip>
+
+## vLLM (Self-Hosted)
+
+vLLM is an OpenAI-compatible inference server. Host your own embedding models on-premises.
+
+### Setup
+
+1. Deploy vLLM with an embedding model
+2. Note the endpoint URL (typically `http://your-host:8000/v1`)
+3. Configure EchoVault:
+
+```yaml
+embedding:
+  provider: openai
+  model: BAAI/bge-small-en-v1.5
+  base_url: http://vllm.internal:8000/v1
+  # api_key: optional-auth-token
+```
+
+<Note>
+Use `provider: openai` for vLLM since it implements the OpenAI embeddings API.
+</Note>
+
+### Configuration Options
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `provider` | string | Yes | Set to `openai` |
+| `model` | string | Yes | Model name exposed by your vLLM instance |
+| `base_url` | string | Yes | vLLM endpoint (e.g., `http://host:8000/v1`) |
+| `api_key` | string | No | Auth token if your vLLM gateway requires it |
+
+### Example: On-Premises vLLM
+
+```yaml
+embedding:
+  provider: openai
+  model: intfloat/e5-large-v2
+  base_url: http://vllm.company.internal:8000/v1
+  api_key: vllm-auth-token-123
+```
+
+## Verify Configuration
+
+After editing `config.yaml`, verify your setup:
+
+```bash
+memory config
+```
+
+Output should show:
+
+```yaml
+embedding:
+  provider: ollama
+  model: nomic-embed-text
+  base_url: http://localhost:11434
+  api_key: null
+context:
+  semantic: auto
+  topup_recent: true
+memory_home: /Users/username/.memory
+memory_home_source: default
+```
+
+<Tip>
+API keys are automatically redacted in `memory config` output.
+</Tip>
+
+## Reindex After Changing Providers
+
+If you change embedding providers or models, rebuild the vector index:
+
+```bash
+memory reindex
+```
+
+This re-embeds all existing memories with the new provider.
+
+<Warning>
+Reindexing sends all memories to the new provider. If switching from local (Ollama) to cloud (OpenAI), be aware that memory content will be sent to OpenAI's API.
+</Warning>
+
+## Testing Embeddings
+
+Save a test memory and search for it:
+
+```bash
+memory save \
+  --title "Test semantic search" \
+  --what "Testing vector embeddings" \
+  --tags "test" \
+  --category "context"
+
+memory search "vector search"
+```
+
+If semantic search is working, the memory should be found even though "vector search" doesn't exactly match "vector embeddings".
+
+## Troubleshooting
+
+### Ollama Not Responding
+
+**Error**: `Connection refused` or timeout
+
+**Solution**:
+
+1. Check if Ollama is running: `ollama list`
+2. Verify the port: `curl http://localhost:11434/api/ps`
+3. Update `base_url` in `config.yaml` if using a custom host/port
+
+### OpenAI Authentication Failed
+
+**Error**: `401 Unauthorized`
+
+**Solution**:
+
+1. Verify API key is correct
+2. Check key has not expired
+3. Ensure `base_url` is `https://api.openai.com/v1`
+
+### Model Not Found
+
+**Error**: `model not found` or `404`
+
+**Solution**:
+
+- **Ollama**: Pull the model: `ollama pull nomic-embed-text`
+- **OpenAI**: Verify model name matches OpenAI's docs
+- **vLLM**: Check model name matches what vLLM is serving
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Reindex Memories" icon="arrows-rotate" href="/cli/reindex">
+    Rebuild vectors after configuration changes
+  </Card>
+  <Card title="Context Configuration" icon="sliders" href="/config/overview">
+    Control how memories are retrieved
+  </Card>
+</CardGroup>

@@ -1,0 +1,86 @@
+---
+title: Agent Support
+description: EchoVault works with Claude Code, Cursor, Codex, and OpenCode through MCP.
+---
+
+EchoVault integrates with coding agents via the Model Context Protocol (MCP). Once installed, your agent can save and retrieve memories without manual intervention.
+
+## How it works
+
+**MCP native** — EchoVault runs as an MCP server exposing three tools:
+- `memory_save` — Save a new memory
+- `memory_search` — Search for memories by query
+- `memory_context` — List recent memories for the current project
+
+Agents call these tools directly during their sessions. No shell hooks or manual prompting needed.
+
+**Zero idle cost** — The MCP server only runs when the agent starts it. No background daemon, no memory overhead.
+
+**Cross-agent** — Memories saved by Claude Code are searchable in Cursor, Codex, and OpenCode. One vault at `~/.memory/vault/`, shared across all agents.
+
+## Supported agents
+
+| Agent | Setup command | Config location |
+|-------|---------------|----------------|
+| [Claude Code](/agents/claude-code) | `memory setup claude-code` | `~/.claude.json` or `.mcp.json` |
+| [Cursor](/agents/cursor) | `memory setup cursor` | `~/.cursor/mcp.json` |
+| [Codex](/agents/codex) | `memory setup codex` | `~/.codex/config.toml` + `AGENTS.md` |
+| [OpenCode](/agents/opencode) | `memory setup opencode` | `~/.config/opencode/opencode.json` or `opencode.json` |
+
+## Installation modes
+
+### Global installation
+
+By default, `memory setup <agent>` installs config globally so all projects use the same memory vault.
+
+```bash
+memory setup claude-code   # writes to ~/.claude.json
+memory setup cursor        # writes to ~/.cursor/mcp.json
+memory setup codex         # writes to ~/.codex/config.toml + AGENTS.md
+memory setup opencode      # writes to ~/.config/opencode/opencode.json
+```
+
+### Project-scoped installation
+
+For project-specific memory, use the `--project` flag. This writes config files into the current project directory.
+
+```bash
+cd ~/my-project
+memory setup claude-code --project   # writes .mcp.json in project root
+memory setup opencode --project      # writes opencode.json in project root
+```
+
+<Note>
+Codex does not support the `--project` flag. Configuration is always written to `~/.codex/`.
+</Note>
+
+## What gets installed
+
+Each agent setup command writes an MCP server entry into the agent's config file:
+
+```json
+{
+  "command": "memory",
+  "args": ["mcp"],
+  "type": "stdio"
+}
+```
+
+The agent spawns `memory mcp` when it starts, exposing the three memory tools.
+
+<Tip>
+Use `memory config` to verify your effective memory home and embedding provider after setup.
+</Tip>
+
+## Uninstalling
+
+To remove EchoVault from an agent:
+
+```bash
+memory uninstall claude-code
+memory uninstall cursor
+memory uninstall codex
+memory uninstall opencode
+```
+
+This removes the MCP server entry from the agent's config. Your memory vault remains untouched.

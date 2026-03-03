@@ -1,0 +1,334 @@
+---
+title: Using Obsidian with EchoVault
+description: Browse your agent's memory vault visually in Obsidian
+---
+
+EchoVault stores memories as **Markdown files with YAML frontmatter**, making them fully compatible with Obsidian. You can browse, edit, and visualize your agent's memory using Obsidian's powerful note-taking features.
+
+## Why Use Obsidian?
+
+- **Visual browsing**: See all memories in a file tree organized by project
+- **Graph view**: Visualize connections between decisions, bugs, and patterns
+- **Full-text search**: Obsidian's search is fast and supports regex
+- **Manual editing**: Fix typos, add context, or reorganize memories directly
+- **Linking**: Create `[[Wiki-style links]]` between related memories
+- **Tags**: Obsidian's tag pane shows all tags across your vault
+
+## Setup
+
+<Steps>
+  <Step title="Install Obsidian">
+    Download from [obsidian.md](https://obsidian.md/)
+  </Step>
+
+  <Step title="Open your memory vault">
+    In Obsidian:
+    1. Click "Open folder as vault"
+    2. Navigate to `~/.memory/vault/` (or your custom `MEMORY_HOME`)
+    3. Click "Open"
+  </Step>
+
+  <Step title="Browse memories">
+    You'll see folders organized by project:
+
+    ```
+    vault/
+    ├── api-server/
+    │   ├── 2026-03-03-session.md
+    │   ├── 2026-03-02-session.md
+    │   └── 2026-03-01-session.md
+    ├── web-app/
+    │   ├── 2026-03-03-session.md
+    │   └── 2026-02-28-session.md
+    └── mobile-app/
+        └── 2026-03-01-session.md
+    ```
+  </Step>
+</Steps>
+
+## Memory File Format
+
+Each session file follows this structure:
+
+```markdown
+---
+project: api-server
+sources: [cursor, claude-code]
+created: 2026-03-03T14:32:18.123456+00:00
+tags: [auth, jwt, api, security]
+---
+
+# 2026-03-03 Session
+
+## Decisions
+
+### Switched to JWT auth
+**What:** Replaced session cookies with JWT for stateless auth
+**Why:** Needed stateless auth for API
+**Impact:** All endpoints now require Bearer token
+**Source:** cursor
+
+<details>
+Context:
+Existing session-based auth didn't work for mobile clients.
+Needed a stateless approach that works across web and mobile.
+
+Options considered:
+- Option A: Keep session cookies, add OAuth for mobile
+- Option B: Migrate to JWT for all clients
+
+Decision:
+JWT provides stateless auth that works everywhere.
+
+Tradeoffs:
+- Pro: Stateless, works across platforms
+- Con: Token size larger than session ID
+
+Follow-up:
+- Implement token refresh
+- Add token revocation
+</details>
+
+## Bugs
+
+### Fixed CORS error in production API
+**What:** Added Access-Control-Allow-Origin header to Nginx config
+**Why:** Production API was rejecting browser requests from web app
+**Impact:** Web app can now call API from different origin
+**Source:** claude-code
+```
+
+### YAML Frontmatter
+
+The frontmatter contains metadata for filtering and organization:
+
+<ParamField path="project" type="string">
+  Project name (typically the directory name)
+</ParamField>
+
+<ParamField path="sources" type="array">
+  Which agents contributed to this session (e.g., `[cursor, claude-code]`)
+</ParamField>
+
+<ParamField path="created" type="string">
+  ISO 8601 timestamp when the session file was created
+</ParamField>
+
+<ParamField path="tags" type="array">
+  All tags from memories in this session (deduplicated)
+</ParamField>
+
+### Category Sections
+
+Memories are organized by category:
+
+- **Decisions**: `## Decisions`
+- **Bugs**: `## Bugs`
+- **Patterns**: `## Patterns`
+- **Learnings**: `## Learnings`
+- **Context**: `## Context`
+
+Each category appears as an H2 heading, with individual memories as H3 subsections.
+
+### Details Collapsible
+
+Extended details are wrapped in `<details>` tags, which Obsidian renders as collapsible sections (though it depends on your theme).
+
+```markdown
+<details>
+Context:
+Detailed analysis...
+
+Options considered:
+- Option A: ...
+- Option B: ...
+
+Decision:
+...
+</details>
+```
+
+You can expand these in Obsidian's reading view.
+
+## Obsidian Workflows
+
+### Search by Tag
+
+Use Obsidian's tag pane to filter memories:
+
+1. Open the right sidebar
+2. Click "Tags"
+3. Click any tag (e.g., `#auth`) to see all memories with that tag
+
+### Search by Content
+
+Use Obsidian's global search:
+
+- `Cmd+Shift+F` (Mac) or `Ctrl+Shift+F` (Windows/Linux)
+- Search for keywords like "JWT", "authentication", or "bug"
+- Supports regex: `/(JWT|OAuth|token)/`
+
+### Graph View
+
+See connections between memories:
+
+1. `Cmd+G` (Mac) or `Ctrl+G` (Windows/Linux)
+2. Obsidian shows a graph of all notes
+3. Manually add `[[Wiki links]]` between related memories to create connections
+
+Example:
+
+```markdown
+### Implemented token refresh
+**What:** Added refresh token rotation for JWT auth
+**Related:** [[2026-03-03-session#Switched to JWT auth]]
+```
+
+### Daily Notes Integration
+
+You can integrate EchoVault sessions with Obsidian's Daily Notes:
+
+1. Enable "Daily notes" core plugin
+2. Set template to include:
+   ```markdown
+   ## Agent Memories
+   ![[{{date:YYYY-MM-DD}}-session.md]]
+   ```
+3. Obsidian will embed the session file into your daily note
+
+## Editing Memories
+
+<Warning>
+Editing files directly in Obsidian bypasses EchoVault's redaction layer. Be careful not to add secrets or credentials.
+</Warning>
+
+You can safely edit memories in Obsidian:
+
+- **Fix typos**: Correct mistakes in titles or descriptions
+- **Add context**: Expand details sections with new insights
+- **Reorganize**: Move memories between category sections
+- **Add links**: Create `[[Wiki links]]` to related memories
+
+Changes are immediately reflected in EchoVault searches.
+
+### Example: Adding Links
+
+```markdown
+### Implemented rate limiting
+**What:** Added Redis-based rate limiting to API
+**Related decisions:** [[2026-02-28-session#Added Redis caching]]
+```
+
+Now when you view "Implemented rate limiting" in Obsidian, you'll see a clickable link to the Redis caching decision.
+
+## Obsidian Plugins
+
+Recommended plugins for working with EchoVault:
+
+### Dataview
+
+Query memories using SQL-like syntax.
+
+**Example:** Show all decisions from the last 7 days:
+
+```markdown
+```dataview
+TABLE file.name as Session, project, tags
+FROM "vault"
+WHERE contains(file.content, "## Decisions")
+  AND file.ctime >= date(today) - dur(7 days)
+SORT file.ctime DESC
+```
+```
+
+### Tag Wrangler
+
+Bulk rename or merge tags across all memories.
+
+**Example:** Rename `#js` to `#javascript` across all files:
+
+1. Right-click `#js` in tag pane
+2. Select "Rename tag"
+3. Enter `javascript`
+
+### Calendar
+
+Visualize memories by date in a calendar view.
+
+1. Install "Calendar" plugin
+2. Open calendar pane
+3. Days with session files are highlighted
+4. Click a day to open that session
+
+### Templater
+
+Create templates for manually adding memories.
+
+**Example template:**
+
+```markdown
+### <% tp.file.cursor(1) %>
+**What:** <% tp.file.cursor(2) %>
+**Why:** <% tp.file.cursor(3) %>
+**Impact:** <% tp.file.cursor(4) %>
+**Tags:** #<% tp.file.cursor(5) %>
+```
+
+Use `Cmd+P` > "Templater: Insert template" to add a new memory section.
+
+## Syncing with Obsidian Sync
+
+If you use Obsidian Sync or another sync service (Dropbox, iCloud, etc.), you can sync your memory vault across machines:
+
+<Steps>
+  <Step title="Move memory home to a synced location">
+    ```bash
+    memory config set-home ~/Dropbox/memory
+    ```
+  </Step>
+
+  <Step title="Open the vault in Obsidian on all machines">
+    On each machine:
+    1. Open Obsidian
+    2. Open `~/Dropbox/memory/vault/` as a vault
+  </Step>
+
+  <Step title="Verify sync">
+    Save a memory on Machine A:
+    ```bash
+    memory save --title "Test sync" --what "Testing cross-machine sync"
+    ```
+
+    Check Machine B's Obsidian vault — the memory should appear within seconds.
+  </Step>
+</Steps>
+
+<Tip>
+If using Git for sync, add `index.db` to `.gitignore` (it's binary). Only sync the `vault/` directory.
+</Tip>
+
+## Performance with Large Vaults
+
+Obsidian handles large vaults well, but performance tips:
+
+- **Exclude search paths**: Settings > Files & Links > Excluded files
+  - Add `index.db`, `config.yaml` to excluded files
+- **Disable unnecessary plugins**: Disable plugins you don't use for memory browsing
+- **Use Dataview sparingly**: Complex Dataview queries can slow down large vaults
+
+EchoVault's session file format is optimized for Obsidian:
+
+- One file per day per project (not per memory)
+- Compact frontmatter
+- No nested folders
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Saving Memories" icon="floppy-disk" href="/guides/saving-memories">
+    Learn the CLI commands for saving memories
+  </Card>
+  <Card title="Searching Memories" icon="magnifying-glass" href="/guides/searching">
+    Use hybrid search to find memories
+  </Card>
+</CardGroup>

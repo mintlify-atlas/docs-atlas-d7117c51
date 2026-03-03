@@ -1,0 +1,295 @@
+---
+title: 'Hybrid Search'
+description: 'FTS5 keyword search combined with semantic vector search'
+---
+
+## Overview
+
+EchoVault uses a hybrid search architecture that combines:
+
+1. **FTS5 keyword search** - Fast, exact matching with BM25 ranking
+2. **Semantic vector search** - Meaning-based similarity using embeddings
+
+This dual approach provides both precision (keyword) and recall (semantic), giving agents the best chance of finding relevant memories.
+
+## Search Modes
+
+### FTS5 Keyword Search
+
+FTS5 is SQLite's built-in full-text search extension:
+
+- **Works immediately** with zero configuration
+- **Porter stemming** matches word variants ("run", "running", "ran")
+- **Prefix matching** finds partial words ("auth" matches "authentication")
+- **BM25 ranking** scores results by relevance
+- **Unicode normalization** handles accents and special characters
+
+<Info>
+From `~/workspace/source/src/memory/db.py:81-87`, the FTS5 table is configured with:
+
+```sql
+CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
+    title, what, why, impact, tags, category, project, source,
+    content='memories', content_rowid='rowid',
+    tokenize='porter unicode61'
+)
+```
+</Info>
+
+**Query Processing**
+
+From `~/workspace/source/src/memory/search.py:398-400`, queries are automatically enhanced with prefix matching:
+
+```python
+terms = query.split()
+fts_query = " OR ".join(f'"{term}"*' for term in terms)
+```
+
+This means searching for "auth token" becomes `"auth"* OR "token"*`, matching "authentication", "authorization", "tokens", etc.
+
+### Semantic Vector Search
+
+Vector search finds memories by meaning, not just keywords:
+
+- **Embedding generation** - Text is converted to high-dimensional vectors
+- **Cosine similarity** - Vectors are compared for semantic similarity
+- **sqlite-vec** - Fast vector search using SQLite extension
+- **Optional** - Requires embedding provider configuration
+
+<Note>
+Vector search is **optional**. Without an embedding provider configured, EchoVault falls back to FTS5-only search with no loss of core functionality.
+</Note>
+
+## Tiered Search Strategy
+
+EchoVault uses a smart "tiered" approach to minimize embedding API latency:
+
+<Steps>
+  <Step title="FTS First">
+    Run FTS5 keyword search first (fast, local, no API calls).
+  </Step>
+  <Step title="Check Results">
+    If FTS returns at least 3 results, skip embedding entirely and return keyword results.
+  </Step>
+  <Step title="Hybrid Fallback">
+    Only if FTS results are sparse (less than 3), call the embedding API and run hybrid search.
+  </Step>
+</Steps>
+
+<Tip>
+From `~/workspace/source/src/memory/search.py:58-111`, tiered search avoids 5-20 second embedding latency for most queries:
+
+```python
+def tiered_search(db, embedding_provider, query, limit=5, min_fts_results=3, ...):
+    fts_results = db.fts_search(query, limit=limit * 2, ...)
+    
+    # If FTS has enough results, return without calling embed
+    if len(fts_results) >= min_fts_results:
+        return fts_results[:limit]
+    
+    # FTS results are sparse — fall back to hybrid
+    query_vec = embedding_provider.embed(query)
+    vec_results = db.vector_search(query_vec, limit=limit * 2, ...)
+    return merge_results(fts_results, vec_results, limit=limit)
+```
+</Tip>
+
+## Hybrid Score Merging
+
+When both FTS and vector results are available, they're merged with weighted scoring:
+
+<CodeGroup>
+```python search.py:9-55
+def merge_results(fts_results, vec_results, fts_weight=0.3, vec_weight=0.7, limit=5):
+    # Normalize FTS scores to 0-1
+    if fts_results:
+        max_fts = max(r["score"] for r in fts_results) or 1.0
+        for r in fts_results:
+            r["score"] = r["score"] / max_fts
+    
+    # Normalize vec scores to 0-1
+    if vec_results:
+        max_vec = max(r["score"] for r in vec_results) or 1.0
+        for r in vec_results:
+            r["score"] = r["score"] / max_vec
+    
+    # Combine with weighted scoring, dedup by id
+    scores = {}
+    for r in fts_results:
+        scores[r["id"]] = dict(r)
+        scores[r["id"]]["score"] = fts_weight * r["score"]
+    for r in vec_results:
+        if r["id"] in scores:
+            scores[r["id"]]["score"] += vec_weight * r["score"]
+        else:
+            scores[r["id"]] = dict(r)
+            scores[r["id"]]["score"] = vec_weight * r["score"]
+    
+    return sorted(scores.values(), key=lambda x: x["score"], reverse=True)[:limit]
+```
+</CodeGroup>
+
+**Default Weights**:
+- FTS: 30% (keyword precision)
+- Vector: 70% (semantic recall)
+
+This favors semantic similarity while still giving credit to exact keyword matches.
+
+## Search Filters
+
+All search modes support optional filters:
+
+### Project Filter
+
+Limit search to a specific project:
+
+```bash
+memory search "authentication" --project
+```
+
+From code:
+```python
+results = service.search("authentication", project="my-app")
+```
+
+### Source Filter
+
+Limit search to memories created by a specific agent:
+
+```bash
+memory search "bug fix" --source claude-code
+```
+
+From code:
+```python
+results = service.search("bug fix", source="cursor")
+```
+
+<Info>
+Filters are applied at the database level for FTS searches, but post-processed for vector searches due to sqlite-vec limitations (from `~/workspace/source/src/memory/db.py:476-480`).
+</Info>
+
+## Context Retrieval
+
+The `memory_context` MCP tool uses intelligent retrieval logic:
+
+### Semantic Mode
+
+Controlled by `context.semantic` in config.yaml:
+
+- **`auto`** (default) - Use vectors if Ollama is warm, otherwise FTS only
+- **`always`** - Always use vector search if available
+- **`never`** - Always use FTS-only search
+
+<CodeGroup>
+```python core.py:384-392
+def _should_use_semantic(self, semantic_mode: str) -> bool:
+    if semantic_mode == "never":
+        return False
+    if semantic_mode == "always":
+        return True
+    provider = self.config.embedding.provider
+    if provider == "ollama":
+        return self._ollama_warm()  # Check if model is loaded
+    return True
+```
+</CodeGroup>
+
+### Recent Topup
+
+Controlled by `context.topup_recent` in config.yaml:
+
+- When `true` (default), context retrieval fills remaining slots with recent memories
+- Ensures agents have fresh context even when semantic search returns few results
+- Deduplicates to avoid returning the same memory twice
+
+From `~/workspace/source/src/memory/core.py:436-446`:
+
+```python
+if topup_recent and len(results) < limit:
+    recent = self.db.list_recent(limit=limit, project=project, source=source)
+    seen = {r["id"] for r in results}
+    for r in recent:
+        if r["id"] in seen:
+            continue
+        results.append(r)
+        if len(results) >= limit:
+            break
+```
+
+## Vector Storage Details
+
+### Dynamic Dimension
+
+The vector table is created dynamically based on the embedding provider's dimension:
+
+<Steps>
+  <Step title="First Embedding">
+    When the first memory is saved, generate an embedding to detect dimension.
+  </Step>
+  <Step title="Store Dimension">
+    Store dimension in meta table: `INSERT INTO meta (key, value) VALUES ('embedding_dim', '768')`.
+  </Step>
+  <Step title="Create Vec Table">
+    Create the virtual table: `CREATE VIRTUAL TABLE memories_vec USING vec0(rowid INTEGER PRIMARY KEY, embedding float[768])`.
+  </Step>
+</Steps>
+
+### Dimension Mismatch Handling
+
+From `~/workspace/source/src/memory/db.py:169-181`, if the embedding dimension changes:
+
+```python
+def ensure_vec_table(self, dim: int) -> None:
+    stored_dim = self.get_embedding_dim()
+    if stored_dim is None:
+        self.set_embedding_dim(dim)
+        self._create_vec_table(dim)
+    elif stored_dim != dim:
+        raise DimensionMismatchError(stored_dim, dim)
+```
+
+**Recovery**: Run `memory reindex` to rebuild the vector table with the new dimension.
+
+## Performance Characteristics
+
+<CardGroup cols={2}>
+  <Card title="FTS5 Search" icon="bolt">
+    - **Latency**: less than 10ms for most queries
+    - **Scaling**: Handles 10,000+ memories efficiently
+    - **No dependencies**: Works with zero configuration
+  </Card>
+  
+  <Card title="Vector Search" icon="network-wired">
+    - **Latency**: 5-20s for Ollama, 200-500ms for OpenAI
+    - **Scaling**: Handles 10,000+ memories efficiently
+    - **Requires**: Embedding provider configuration
+  </Card>
+</CardGroup>
+
+<Tip>
+Use tiered search (default) to get the best of both: FTS speed when possible, semantic power when needed.
+</Tip>
+
+## Search Result Format
+
+Search returns compact memory pointers:
+
+```json
+{
+  "id": "a1b2c3d4-...",
+  "title": "Switched to JWT auth",
+  "what": "Replaced session cookies with JWT tokens",
+  "why": "Needed stateless auth for API",
+  "impact": "All endpoints now require Bearer token",
+  "category": "decision",
+  "tags": ["auth", "jwt"],
+  "project": "my-app",
+  "source": "claude-code",
+  "score": 0.87,
+  "has_details": true,
+  "created_at": "2026-03-01T10:30:00Z"
+}
+```
+
+Use `memory details <id>` to fetch the full details body when needed.

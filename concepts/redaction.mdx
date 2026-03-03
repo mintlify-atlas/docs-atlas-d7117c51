@@ -1,0 +1,297 @@
+---
+title: 'Secret Redaction'
+description: '3-layer system to prevent secrets from being stored in memories'
+---
+
+## Overview
+
+EchoVault implements a comprehensive 3-layer redaction system to ensure API keys, passwords, and other sensitive data never make it into your memory vault.
+
+<Warning>
+Redaction happens **before** anything is written to disk or stored in the database. Once redacted, secrets cannot be recovered.
+</Warning>
+
+## The Three Layers
+
+From `~/workspace/source/src/memory/redaction.py:1-9`, the system uses three progressive layers of protection:
+
+<Steps>
+  <Step title="Layer 1: Explicit Tags">
+    User-marked sensitive content wrapped in `<redacted>` tags.
+  </Step>
+  <Step title="Layer 2: Pattern Detection">
+    Automatic detection of known secret formats (API keys, tokens, passwords).
+  </Step>
+  <Step title="Layer 3: Custom Rules">
+    Project-specific patterns defined in `.memoryignore` file.
+  </Step>
+</Steps>
+
+## Layer 1: Explicit Redaction Tags
+
+Wrap sensitive content in `<redacted>` tags to explicitly mark it for removal:
+
+```bash
+memory save \
+  --title "OpenAI integration setup" \
+  --what "Configured OpenAI API with key <redacted>sk-proj-abc123</redacted>" \
+  --category "context"
+```
+
+Stored as:
+```
+Configured OpenAI API with key [REDACTED]
+```
+
+### Tag Handling
+
+From `~/workspace/source/src/memory/redaction.py:49-59`, the implementation handles nested and multiline tags:
+
+```python
+# Layer 1: Explicit <redacted> tags
+while True:
+    prev_text = text
+    text = REDACTED_TAG_PATTERN.sub("[REDACTED]", text)
+    if prev_text == text:
+        break
+
+# Clean up any remaining orphaned tags
+text = text.replace("<redacted>", "").replace("</redacted>", "")
+```
+
+<Tip>
+Use explicit tags when you need to reference a secret in context but don't want it stored. Example:
+
+```
+"Used production API key <redacted>pk_live_xyz</redacted> to test webhook delivery"
+```
+</Tip>
+
+## Layer 2: Automatic Pattern Detection
+
+EchoVault automatically detects and redacts common secret patterns:
+
+<AccordionGroup>
+  <Accordion title="Supported Patterns" icon="shield-halved">
+    From `~/workspace/source/src/memory/redaction.py:14-26`, the built-in patterns include:
+
+    ```python
+    SENSITIVE_PATTERNS = [
+        r"sk_live_[a-zA-Z0-9]+",                      # Stripe live keys
+        r"sk_test_[a-zA-Z0-9]+",                      # Stripe test keys
+        r"ghp_[a-zA-Z0-9]+",                          # GitHub personal access tokens
+        r"AKIA[0-9A-Z]{16}",                          # AWS access key IDs
+        r"xoxb-[a-zA-Z0-9-]+",                        # Slack bot tokens
+        r"-----BEGIN (?:RSA )?PRIVATE KEY-----",      # Private keys (RSA and generic)
+        r"eyJ[a-zA-Z0-9_-]+\.eyJ[a-zA-Z0-9_-]+",     # JWT tokens
+        r"password\s*[:=]\s*[\"']?.+",                # Password fields
+        r"secret\s*[:=]\s*[\"']?.+",                  # Secret fields
+        r"api[_-]?key\s*[:=]\s*[\"']?.+",            # API key fields
+    ]
+    ```
+
+    All patterns are case-insensitive.
+  </Accordion>
+
+  <Accordion title="Pattern Examples" icon="code">
+    **Before redaction:**
+    ```
+    API_KEY=sk_live_abc123def456
+    password: "my-secret-pass"
+    Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0
+    SLACK_BOT_TOKEN=xoxb-123456789-abcdef
+    AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE
+    ```
+
+    **After redaction:**
+    ```
+    API_KEY=[REDACTED]
+    [REDACTED]
+    Authorization: Bearer [REDACTED]
+    SLACK_BOT_TOKEN=[REDACTED]
+    AWS_ACCESS_KEY_ID=[REDACTED]
+    ```
+  </Accordion>
+</AccordionGroup>
+
+<Note>
+Pattern detection is automatic and always active. You don't need to configure anything - it just works.
+</Note>
+
+## Layer 3: Custom Patterns (.memoryignore)
+
+For project-specific sensitive data, create a `.memoryignore` file:
+
+```bash
+# Location: ~/.memory/.memoryignore
+
+# SSN pattern
+\d{3}-\d{2}-\d{4}
+
+# Internal employee IDs
+EMP-\d{6}
+
+# Custom API key format
+app_key_[a-f0-9]{32}
+
+# Email addresses (if you want to redact them)
+[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}
+```
+
+### File Format
+
+From `~/workspace/source/src/memory/redaction.py:69-105`, the parser supports:
+
+- **One regex pattern per line**
+- **Comments** starting with `#`
+- **Empty lines** (ignored)
+- **Raw regex syntax** (no quotes or delimiters needed)
+
+<CodeGroup>
+```python redaction.py:93-105
+def load_memoryignore(path: str) -> list[str]:
+    try:
+        with open(path) as f:
+            lines = f.readlines()
+    except FileNotFoundError:
+        return []
+    
+    patterns = []
+    for line in lines:
+        line = line.strip()
+        if line and not line.startswith("#"):
+            patterns.append(line)
+    
+    return patterns
+```
+</CodeGroup>
+
+### Pattern Testing
+
+Test your patterns before deploying:
+
+```python
+from memory.redaction import redact, load_memoryignore
+
+patterns = load_memoryignore(".memoryignore")
+test_text = "Employee EMP-123456 accessed the system"
+result = redact(test_text, patterns)
+print(result)  # "Employee [REDACTED] accessed the system"
+```
+
+<Warning>
+Be careful with overly broad patterns. For example, `\d+` would redact ALL numbers including line numbers, timestamps, and counts.
+</Warning>
+
+## Redaction Pipeline
+
+When you save a memory, all text fields are redacted:
+
+From `~/workspace/source/src/memory/core.py:211-218`:
+
+```python
+# Redact all text fields
+raw.what = redact(raw.what, self.ignore_patterns)
+if raw.why:
+    raw.why = redact(raw.why, self.ignore_patterns)
+if raw.impact:
+    raw.impact = redact(raw.impact, self.ignore_patterns)
+if raw.details:
+    raw.details = redact(raw.details, self.ignore_patterns)
+```
+
+**Fields that get redacted:**
+- `what` (always)
+- `why` (if present)
+- `impact` (if present)
+- `details` (if present)
+
+**Fields that are NOT redacted:**
+- `title` (for better search UX)
+- `tags` (assumed to be safe metadata)
+- `category` (enum value)
+- `related_files` (file paths)
+
+<Info>
+If you need to redact titles or tags, wrap them in `<redacted>` tags explicitly.
+</Info>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Use Explicit Tags" icon="tag">
+    When you know something is sensitive, wrap it in `<redacted>` tags immediately. Don't rely solely on pattern detection.
+  </Card>
+  
+  <Card title="Test Your Patterns" icon="flask">
+    Before adding patterns to `.memoryignore`, test them with sample data to avoid over-redaction.
+  </Card>
+  
+  <Card title="Avoid Secrets Entirely" icon="circle-xmark">
+    The best practice is to not include secrets in memory saves at all. Reference them indirectly when possible.
+  </Card>
+  
+  <Card title="Review Session Files" icon="eye">
+    Periodically review files in `~/.memory/vault/` to ensure no secrets slipped through.
+  </Card>
+</CardGroup>
+
+## Examples
+
+### Good: Redacted Reference
+```bash
+memory save \
+  --title "Configured Stripe integration" \
+  --what "Added Stripe publishable key to frontend config" \
+  --why "Needed for checkout flow" \
+  --impact "Checkout now processes payments" \
+  --details "Used test key <redacted>pk_test_abc</redacted> for staging"
+```
+
+### Bad: Secret in Title
+```bash
+memory save \
+  --title "Added API key sk_live_12345" \
+  --what "Configured production API"
+```
+The secret is in the title, which is not redacted by default.
+
+### Better: Generic Title
+```bash
+memory save \
+  --title "Configured production API" \
+  --what "Added API key <redacted>sk_live_12345</redacted> to .env"
+```
+
+## Redaction Guarantees
+
+<Note>
+**What is guaranteed:**
+- All known secret patterns are redacted before database insert
+- All explicit `<redacted>` tags are replaced with `[REDACTED]`
+- Custom `.memoryignore` patterns are applied to all text fields
+- Redaction happens before markdown file write
+
+**What is NOT guaranteed:**
+- Secrets with unknown formats that don't match any pattern
+- Secrets in unusual encodings (base64, hex) that don't match JWT pattern
+- Secrets in file paths or code structure (these require explicit tags)
+</Note>
+
+## Recovery
+
+Once content is redacted, it **cannot be recovered**. The original text is never stored.
+
+If you accidentally redacted something important:
+
+1. Check your shell history for the original command
+2. Look in agent logs (if the agent logged the original content)
+3. Recreate the memory with corrected content
+
+<Tip>
+For non-secret but important data that might match patterns (like example API keys in documentation), use explicit tags to control redaction:
+
+```
+Example API key format: <redacted>sk_test_example123</redacted> (not a real key)
+```
+</Tip>

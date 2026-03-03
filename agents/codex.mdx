@@ -1,0 +1,177 @@
+---
+title: Codex
+description: Set up EchoVault for Codex using AGENTS.md and config.toml.
+---
+
+Codex integrates with EchoVault via two mechanisms: MCP server config in `config.toml` for native MCP support, and `AGENTS.md` as a fallback for agents that don't use MCP tools.
+
+## Installation
+
+<Steps>
+  <Step title="Install EchoVault">
+    ```bash
+    pip install git+https://github.com/mraza007/echovault.git
+    memory init
+    ```
+  </Step>
+
+  <Step title="Run setup">
+    ```bash
+    memory setup codex
+    ```
+
+    This writes:
+    - MCP server config to `~/.codex/config.toml`
+    - Memory instructions to `~/.codex/AGENTS.md`
+  </Step>
+
+  <Step title="Restart Codex">
+    Restart Codex to load the new configuration.
+  </Step>
+</Steps>
+
+## What gets installed
+
+### MCP config (config.toml)
+
+The setup command adds an `[mcp_servers.echovault]` section to `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.echovault]
+command = "memory"
+args = ["mcp"]
+```
+
+Codex spawns `memory mcp` at session start and gains access to three tools:
+- `memory_save`
+- `memory_search`
+- `memory_context`
+
+### AGENTS.md fallback
+
+The setup command also appends memory instructions to `~/.codex/AGENTS.md`. This provides fallback instructions for agents that don't use MCP tools directly.
+
+```markdown
+## EchoVault — Persistent Memory
+
+You have persistent memory across sessions. Use it.
+
+### Session start — MANDATORY
+
+Before doing any work, retrieve context:
+
+```bash
+memory context --project
+```
+
+Search for relevant memories:
+
+```bash
+memory search "<relevant terms>"
+```
+
+When results show "Details: available", fetch them:
+
+```bash
+memory details <memory-id>
+```
+
+### Session end — MANDATORY
+
+Before finishing any task that involved changes, debugging, decisions, or learning, save a memory:
+
+```bash
+memory save \
+  --title "Short descriptive title" \
+  --what "What happened or was decided" \
+  --why "Reasoning behind it" \
+  --impact "What changed as a result" \
+  --tags "tag1,tag2,tag3" \
+  --category "decision" \
+  --related-files "path/to/file1,path/to/file2" \
+  --source "codex" \
+  --details "Context:
+
+             Options considered:
+             - Option A
+             - Option B
+
+             Decision:
+             Tradeoffs:
+             Follow-up:"
+```
+
+Categories: `decision`, `bug`, `pattern`, `learning`, `context`.
+
+### Rules
+
+- Retrieve before working. Save before finishing. No exceptions.
+- Never include API keys, secrets, or credentials.
+- Search before saving to avoid duplicates.
+```
+
+<Note>
+Codex agents that support MCP will use the `config.toml` entry. Agents that rely on system instructions will follow the `AGENTS.md` guidance.
+</Note>
+
+## Config file locations
+
+| File | Purpose |
+|------|--------|
+| `~/.codex/config.toml` | MCP server config |
+| `~/.codex/AGENTS.md` | Fallback instructions for non-MCP agents |
+| `~/.codex/skills/echovault/SKILL.md` | Legacy skill file (installed but deprecated) |
+
+<Warning>
+Codex does not support project-scoped installation. All config is written to `~/.codex/`.
+</Warning>
+
+## Custom config directory
+
+If your `.codex` directory is in a non-standard location:
+
+```bash
+memory setup codex --config-dir /path/to/.codex
+```
+
+The setup command writes to `/path/to/.codex/config.toml` and `/path/to/.codex/AGENTS.md`.
+
+## Uninstalling
+
+To remove EchoVault from Codex:
+
+```bash
+memory uninstall codex
+```
+
+This removes:
+- The `[mcp_servers.echovault]` section from `config.toml`
+- The `## EchoVault` section from `AGENTS.md`
+- The `skills/echovault/` directory
+
+<Tip>
+Your memory vault at `~/.memory/vault/` is not deleted. Only the config files are cleaned.
+</Tip>
+
+## Usage
+
+Once installed, Codex automatically:
+- Calls `memory_context --project` at session start to load recent memories (if using MCP)
+- Calls `memory_search <query>` when searching for relevant context (if using MCP)
+- Calls `memory_save` to persist decisions, bugs, and learnings (if using MCP)
+
+For agents relying on `AGENTS.md` instructions, they'll use the CLI commands directly via shell.
+
+## Auto-persist limitations
+
+<Warning>
+Auto-persist (Stop hook) is only available for Claude Code. Codex relies on `AGENTS.md` instructions for saving memories. Agents must explicitly call `memory save` before ending a session.
+</Warning>
+
+## TOML parsing fallback
+
+If `config.toml` contains non-standard TOML syntax that can't be parsed, the setup command falls back to appending the `[mcp_servers.echovault]` section directly without parsing the file. This ensures compatibility with Codex's custom config format.
+
+<Tip>
+Use `memory config` to verify your setup and check the effective memory home path.
+</Tip>
