@@ -1,0 +1,125 @@
+{
+  "projectType": "cli-tool",
+  "projectName": "EchoVault",
+  "projectDescription": "Local-first memory for coding agents with persistent storage and hybrid search",
+  "theme": "aspen",
+  "primaryColor": "#7C3AED",
+  "lightColor": "#A78BFA",
+  "darkColor": "#5B21B6",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/how-it-works",
+              "concepts/memory-types",
+              "concepts/search",
+              "concepts/redaction"
+            ]
+          },
+          {
+            "group": "Usage Guide",
+            "pages": [
+              "guides/saving-memories",
+              "guides/searching",
+              "guides/agent-integration",
+              "guides/obsidian"
+            ]
+          },
+          {
+            "group": "Agent Setup",
+            "pages": [
+              "agents/overview",
+              "agents/claude-code",
+              "agents/cursor",
+              "agents/codex",
+              "agents/opencode"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "config/overview",
+              "config/embeddings",
+              "config/memory-location",
+              "config/memoryignore"
+            ]
+          },
+          {
+            "group": "Resources",
+            "pages": [
+              "troubleshooting",
+              "faq",
+              "privacy"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "CLI Reference",
+        "groups": [
+          {
+            "group": "Commands",
+            "pages": [
+              "cli/init",
+              "cli/save",
+              "cli/search",
+              "cli/details",
+              "cli/delete",
+              "cli/context",
+              "cli/sessions",
+              "cli/config",
+              "cli/reindex",
+              "cli/setup",
+              "cli/uninstall",
+              "cli/mcp"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Local-first memory persistence with zero cloud dependencies",
+    "Hybrid search combining FTS5 keyword search and optional semantic vectors",
+    "MCP native integration with memory_save, memory_search, and memory_context tools",
+    "Multi-agent support for Claude Code, Cursor, Codex, and OpenCode",
+    "Obsidian-compatible Markdown storage with YAML frontmatter",
+    "3-layer secret redaction system for API keys and credentials",
+    "Zero idle cost with no background processes or daemons"
+  ],
+  "publicApiSurface": [
+    "memory init",
+    "memory save --title --what [--why] [--impact] [--tags] [--category] [--related-files] [--details] [--source] [--project]",
+    "memory search <query> [--limit] [--project] [--source]",
+    "memory details <memory_id>",
+    "memory delete <memory_id>",
+    "memory context [--project] [--source] [--limit] [--query] [--semantic] [--fts-only]",
+    "memory sessions [--limit] [--project]",
+    "memory config",
+    "memory config init [--force]",
+    "memory config set-home <path>",
+    "memory config clear-home",
+    "memory reindex",
+    "memory setup claude-code [--config-dir] [--project]",
+    "memory setup cursor [--config-dir] [--project]",
+    "memory setup codex [--config-dir] [--project]",
+    "memory setup opencode [--project]",
+    "memory uninstall claude-code [--config-dir] [--project]",
+    "memory uninstall cursor [--config-dir] [--project]",
+    "memory uninstall codex [--config-dir] [--project]",
+    "memory uninstall opencode [--project]",
+    "memory mcp"
+  ]
+}
